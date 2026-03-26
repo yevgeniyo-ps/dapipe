@@ -15,7 +15,7 @@ export default async function WaitlistPage() {
     data: { user },
   } = await supabase.auth.getUser();
 
-  if (!user) redirect("/auth/login");
+  if (!user) redirect("/login");
 
   // If already approved, go to dashboard
   const { data: approved } = await supabase.rpc("is_approved");

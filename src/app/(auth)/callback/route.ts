@@ -14,11 +14,11 @@ export async function GET(request: Request) {
       // Check if user is approved
       const { data: approved } = await supabase.rpc("is_approved");
       if (!approved) {
-        return NextResponse.redirect(`${origin}/auth/waitlist`);
+        return NextResponse.redirect(`${origin}/waitlist`);
       }
       return NextResponse.redirect(`${origin}${next}`);
     }
   }
 
-  return NextResponse.redirect(`${origin}/auth/login?error=auth`);
+  return NextResponse.redirect(`${origin}/login?error=auth`);
 }

@@ -13,11 +13,11 @@ export default async function DashboardLayout({
     data: { user },
   } = await supabase.auth.getUser();
 
-  if (!user) redirect("/auth/login");
+  if (!user) redirect("/login");
 
   // Check if user is approved
   const { data: approved } = await supabase.rpc("is_approved");
-  if (!approved) redirect("/auth/waitlist");
+  if (!approved) redirect("/waitlist");
 
   // Bootstrap org if needed: check if user has any org membership
   const { data: memberships } = await supabase
