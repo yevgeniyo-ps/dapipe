@@ -15,21 +15,21 @@ export default async function DashboardLayout({
 
   if (!user) redirect("/login");
 
-  // Check if user is approved
-  const { data: approved } = await supabase.rpc("is_approved");
+  // Run approval check and membership check in parallel
+  const [{ data: approved }, { data: memberships }] = await Promise.all([
+    supabase.rpc("is_approved"),
+    supabase
+      .from("org_members")
+      .select("org_id")
+      .eq("user_id", user.id)
+      .limit(1),
+  ]);
+
   if (!approved) redirect("/waitlist");
 
-  // Bootstrap org if needed: check if user has any org membership
-  const { data: memberships } = await supabase
-    .from("org_members")
-    .select("org_id")
-    .eq("user_id", user.id)
-    .limit(1);
-
   if (!memberships || memberships.length === 0) {
-    // Auto-create org + owner membership
     const name =
-      user.user_metadata?.user_name ||
+      user.user_metadata?.full_name ||
       user.email?.split("@")[0] ||
       "My Org";
     const slug = name.toLowerCase().replace(/[^a-z0-9]/g, "-");
