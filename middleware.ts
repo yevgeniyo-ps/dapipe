@@ -25,13 +25,14 @@ export async function middleware(request: NextRequest) {
     }
   );
 
-  // Refresh session
+  // Use getSession() — reads from cookie, no network call.
+  // The dashboard layout will do the full getUser() validation.
   const {
-    data: { user },
-  } = await supabase.auth.getUser();
+    data: { session },
+  } = await supabase.auth.getSession();
 
   // Protect dashboard routes
-  if (request.nextUrl.pathname.startsWith("/dashboard") && !user) {
+  if (request.nextUrl.pathname.startsWith("/dashboard") && !session) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
     return NextResponse.redirect(url);
