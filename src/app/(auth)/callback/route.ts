@@ -14,40 +14,19 @@ export async function GET(request: Request) {
     ? `${proto}://${forwardedHost}`
     : `${proto}://${host}`;
 
-  // DEBUG: return diagnostic info instead of redirecting
-  if (searchParams.get("debug") === "1") {
-    return NextResponse.json({
-      origin,
-      forwardedHost,
-      host,
-      proto,
-      hasCode: !!code,
-      codeLength: code?.length,
-    });
-  }
-
   if (code) {
     const supabase = await createClient();
     const { error } = await supabase.auth.exchangeCodeForSession(code);
 
-    if (error) {
-      // DEBUG: show the actual error
-      return NextResponse.json(
-        { error: error.message, code: error.status, origin },
-        { status: 400 }
-      );
+    if (!error) {
+      // Check if user is approved
+      const { data: approved } = await supabase.rpc("is_approved");
+      if (!approved) {
+        return NextResponse.redirect(`${origin}/waitlist`);
+      }
+      return NextResponse.redirect(`${origin}${next}`);
     }
-
-    // Check if user is approved
-    const { data: approved } = await supabase.rpc("is_approved");
-    if (!approved) {
-      return NextResponse.redirect(`${origin}/waitlist`);
-    }
-    return NextResponse.redirect(`${origin}${next}`);
   }
 
-  return NextResponse.json(
-    { error: "no_code", searchParams: Object.fromEntries(searchParams), origin },
-    { status: 400 }
-  );
+  return NextResponse.redirect(`${origin}/login?error=auth`);
 }
