@@ -2,9 +2,17 @@ import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 
 export async function GET(request: Request) {
-  const { searchParams, origin } = new URL(request.url);
+  const { searchParams } = new URL(request.url);
   const code = searchParams.get("code");
   const next = searchParams.get("next") ?? "/dashboard";
+
+  // Use x-forwarded-host on Vercel, fall back to host header
+  const forwardedHost = request.headers.get("x-forwarded-host");
+  const host = request.headers.get("host");
+  const proto = request.headers.get("x-forwarded-proto") ?? "https";
+  const origin = forwardedHost
+    ? `${proto}://${forwardedHost}`
+    : `${proto}://${host}`;
 
   if (code) {
     const supabase = await createClient();
@@ -18,6 +26,9 @@ export async function GET(request: Request) {
       }
       return NextResponse.redirect(`${origin}${next}`);
     }
+
+    // Log exchange error for debugging
+    console.error("Auth code exchange failed:", error.message);
   }
 
   return NextResponse.redirect(`${origin}/login?error=auth`);
