@@ -94,6 +94,15 @@ if [ -n "$SAAS_ALLOWED" ]; then
     echo "Merged SaaS allowed domains: $SAAS_ALLOWED"
 fi
 
+# Always allow the DaPipe SaaS API domain so the analyze step can upload reports
+if [ -n "${DAPIPE_API_KEY:-}" ]; then
+    DAPIPE_HOST=$(echo "${DAPIPE_API_URL:-https://app.dapipe.io}" | sed 's|https\?://||' | sed 's|/.*||')
+    if [ -n "$DAPIPE_HOST" ] && ! echo "$ALLOWED_DOMAINS" | grep -qF "$DAPIPE_HOST"; then
+        ALLOWED_DOMAINS="${ALLOWED_DOMAINS:+$ALLOWED_DOMAINS,}$DAPIPE_HOST"
+        echo "Auto-allowed DaPipe SaaS host: $DAPIPE_HOST"
+    fi
+fi
+
 # 6. Export environment variables for subsequent steps
 if [ -n "${GITHUB_ENV:-}" ]; then
     echo "LD_PRELOAD=$HOOK_SO" >> "$GITHUB_ENV"
