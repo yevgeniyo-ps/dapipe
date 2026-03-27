@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "allowed_domains": [
+    "github.com",
+    "api.github.com",
+    "registry.npmjs.org",
+    "registry.yarnpkg.com",
+    "nodejs.org",
+    "objects.githubusercontent.com"
+  ]
+}

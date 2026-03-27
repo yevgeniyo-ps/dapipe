@@ -1,0 +1,72 @@
+name: 'DaPipe'
+description: 'Detect anomalous outbound network connections in CI pipelines'
+author: 'DaPipe'
+
+inputs:
+  baseline-path:
+    description: 'Path to baseline JSON file with allowed domains'
+    required: false
+    default: '.dapipe/baseline.json'
+  mode:
+    description: 'monitor = warn on new domains, restrict = block any domain not in baseline'
+    required: false
+    default: 'monitor'
+  log-dir:
+    description: 'Directory to store connection logs'
+    required: false
+    default: '/tmp/dapipe'
+  blocked-domains:
+    description: 'Comma-separated list of domains to always block at DNS level'
+    required: false
+    default: ''
+  blocked-ips:
+    description: 'Comma-separated list of IPs to always block at connect level'
+    required: false
+    default: ''
+  api-key:
+    description: 'DaPipe SaaS API key (optional, enables centralized policy + reporting)'
+    required: false
+    default: ''
+  api-url:
+    description: 'DaPipe SaaS API URL'
+    required: false
+    default: 'https://app.dapipe.io'
+  step:
+    description: 'Which step to run: "setup" or "analyze"'
+    required: true
+
+outputs:
+  new-domains:
+    description: 'Comma-separated list of newly observed domains'
+    value: ${{ steps.analyze.outputs.new-domains }}
+  connection-count:
+    description: 'Total number of connection events logged'
+    value: ${{ steps.analyze.outputs.connection-count }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: DaPipe Setup
+      id: setup
+      if: inputs.step == 'setup'
+      shell: bash
+      env:
+        DAPIPE_API_KEY: ${{ inputs.api-key }}
+        DAPIPE_API_URL: ${{ inputs.api-url }}
+      run: >-
+        ${{ github.action_path }}/scripts/setup.sh
+        "${{ inputs.log-dir }}"
+        "${{ inputs.mode }}"
+        "${{ inputs.baseline-path }}"
+        "${{ inputs.blocked-domains }}"
+        "${{ inputs.blocked-ips }}"
+
+    - name: DaPipe Analyze
+      id: analyze
+      if: inputs.step == 'analyze'
+      shell: bash
+      env:
+        DAPIPE_LOG_DIR: ${{ inputs.log-dir }}
+        DAPIPE_API_KEY: ${{ inputs.api-key }}
+        DAPIPE_API_URL: ${{ inputs.api-url }}
+      run: ${{ github.action_path }}/scripts/analyze.sh "${{ inputs.baseline-path }}" "${{ inputs.mode }}"
