@@ -20,7 +20,7 @@ export default async function ReportsPage() {
     .select("org_id")
     .eq("user_id", user!.id)
     .limit(1)
-    .single();
+    .maybeSingle();
 
   const { data: reports } = await supabase
     .from("reports")

@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { createClient } from "@/lib/supabase/client";
+import { useOrgId } from "@/components/org-context";
+import { getOrg, saveOrg } from "../actions";
 import {
   Card,
   CardContent,
@@ -14,53 +15,32 @@ import { Button } from "@/components/ui/button";
 import { Loader2, Save } from "lucide-react";
 
 export default function SettingsPage() {
+  const orgId = useOrgId();
   const [orgName, setOrgName] = useState("");
   const [orgSlug, setOrgSlug] = useState("");
-  const [orgId, setOrgId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    if (!orgId) { setLoading(false); return; }
     async function load() {
-      const supabase = createClient();
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) return;
-
-      const { data: membership } = await supabase
-        .from("org_members")
-        .select("org_id")
-        .eq("user_id", user.id)
-        .limit(1)
-        .single();
-
-      if (!membership) return;
-
-      const { data: org } = await supabase
-        .from("organizations")
-        .select("*")
-        .eq("id", membership.org_id)
-        .single();
-
-      if (org) {
-        setOrgId(org.id);
-        setOrgName(org.name);
-        setOrgSlug(org.slug);
+      try {
+        const org = await getOrg(orgId!);
+        if (org) {
+          setOrgName(org.name);
+          setOrgSlug(org.slug);
+        }
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
     }
     load();
-  }, []);
+  }, [orgId]);
 
   const handleSave = async () => {
     if (!orgId) return;
     setSaving(true);
-    const supabase = createClient();
-    await supabase
-      .from("organizations")
-      .update({ name: orgName, slug: orgSlug })
-      .eq("id", orgId);
+    await saveOrg(orgId, orgName, orgSlug);
     setSaving(false);
   };
 

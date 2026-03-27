@@ -26,13 +26,13 @@ export default async function RepoDetailPage({
 
   if (!repo) notFound();
 
-  // Get repo-specific policy
+  // Get repo-specific policy (may not exist — use maybeSingle)
   const { data: policy } = await supabase
     .from("policies")
     .select("*")
     .eq("repo_id", id)
     .limit(1)
-    .single();
+    .maybeSingle();
 
   // Get recent reports for this repo
   const { data: reports } = await supabase

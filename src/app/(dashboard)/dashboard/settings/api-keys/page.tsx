@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { createClient } from "@/lib/supabase/client";
+import { useOrgId } from "@/components/org-context";
+import { createApiKey, revokeApiKey, getApiKeys } from "../../actions";
 import {
   Card,
   CardContent,
@@ -11,95 +12,63 @@ import {
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
-import { Key, Plus, Copy, Loader2 } from "lucide-react";
+import { Key, Plus, Copy, Loader2, X } from "lucide-react";
 import type { ApiKey } from "@/lib/types/database";
 
 export default function ApiKeysPage() {
+  const orgId = useOrgId();
   const [keys, setKeys] = useState<ApiKey[]>([]);
-  const [orgId, setOrgId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const [newKeyName, setNewKeyName] = useState("Default");
   const [newKeyValue, setNewKeyValue] = useState<string | null>(null);
-  const [dialogOpen, setDialogOpen] = useState(false);
+  const [showCreate, setShowCreate] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    loadKeys();
-  }, []);
+    if (!orgId) { setLoading(false); return; }
+    loadKeys(orgId);
+  }, [orgId]);
 
-  async function loadKeys() {
-    const supabase = createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) return;
-
-    const { data: membership } = await supabase
-      .from("org_members")
-      .select("org_id")
-      .eq("user_id", user.id)
-      .limit(1)
-      .single();
-
-    if (!membership) return;
-    setOrgId(membership.org_id);
-
-    const { data } = await supabase
-      .from("api_keys")
-      .select("*")
-      .eq("org_id", membership.org_id)
-      .is("revoked_at", null)
-      .order("created_at", { ascending: false });
-
-    setKeys(data || []);
-    setLoading(false);
+  async function loadKeys(oid: string) {
+    try {
+      const data = await getApiKeys(oid);
+      setKeys(data as ApiKey[]);
+    } finally {
+      setLoading(false);
+    }
   }
 
   const handleCreate = async () => {
-    if (!orgId) return;
+    if (!orgId) {
+      setError("No organization found — try refreshing the page");
+      return;
+    }
     setCreating(true);
+    setError(null);
 
-    // Generate a random key
-    const rawKey = `dp_${crypto.randomUUID().replace(/-/g, "")}`;
-    const prefix = rawKey.slice(0, 10) + "...";
+    try {
+      const result = await createApiKey(orgId, newKeyName);
 
-    // Hash it client-side
-    const encoder = new TextEncoder();
-    const data = encoder.encode(rawKey);
-    const hashBuffer = await crypto.subtle.digest("SHA-256", data);
-    const hashArray = Array.from(new Uint8Array(hashBuffer));
-    const keyHash = hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
+      if (result.error) {
+        setError(result.error);
+        setCreating(false);
+        return;
+      }
 
-    const supabase = createClient();
-    await supabase.from("api_keys").insert({
-      org_id: orgId,
-      key_hash: keyHash,
-      key_prefix: prefix,
-      name: newKeyName,
-    });
-
-    setNewKeyValue(rawKey);
-    setCreating(false);
-    await loadKeys();
+      setNewKeyValue(result.key);
+      await loadKeys(orgId);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Failed to create key");
+    } finally {
+      setCreating(false);
+    }
   };
 
   const handleRevoke = async (keyId: string) => {
-    const supabase = createClient();
-    await supabase
-      .from("api_keys")
-      .update({ revoked_at: new Date().toISOString() })
-      .eq("id", keyId);
-    await loadKeys();
+    if (!orgId) return;
+    await revokeApiKey(keyId);
+    await loadKeys(orgId);
   };
 
   const copyToClipboard = (text: string) => {
@@ -118,38 +87,48 @@ export default function ApiKeysPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">API Keys</h1>
-        <Dialog
-          open={dialogOpen}
-          onOpenChange={(open) => {
-            setDialogOpen(open);
-            if (!open) {
-              setNewKeyValue(null);
-              setNewKeyName("Default");
-            }
-          }}
-        >
-          <DialogTrigger>
-            <Plus className="mr-2 h-4 w-4" />
-            Create key
-          </DialogTrigger>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>
-                {newKeyValue ? "Key created" : "Create API key"}
-              </DialogTitle>
-              <DialogDescription>
-                {newKeyValue
-                  ? "Copy this key now. You won't be able to see it again."
-                  : "This key authenticates the DaPipe GitHub Action."}
-              </DialogDescription>
-            </DialogHeader>
+        <Button onClick={() => setShowCreate(true)}>
+          <Plus className="mr-2 h-4 w-4" />
+          Create key
+        </Button>
+      </div>
 
+      {error && (
+        <div className="rounded-md border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive">
+          {error}
+        </div>
+      )}
+
+      {showCreate && (
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <CardTitle>
+                {newKeyValue ? "Key created" : "Create API key"}
+              </CardTitle>
+              <button
+                onClick={() => {
+                  setShowCreate(false);
+                  setNewKeyValue(null);
+                  setNewKeyName("Default");
+                  setError(null);
+                }}
+                className="rounded-md p-1 hover:bg-muted"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <CardDescription>
+              {newKeyValue
+                ? "Copy this key now. You won't be able to see it again."
+                : "This key authenticates the DaPipe GitHub Action."}
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
             {newKeyValue ? (
               <div className="space-y-3">
                 <div className="flex items-center gap-2 rounded-md border bg-muted p-3">
-                  <code className="flex-1 text-sm break-all">
-                    {newKeyValue}
-                  </code>
+                  <code className="flex-1 text-sm break-all">{newKeyValue}</code>
                   <Button
                     variant="ghost"
                     size="icon"
@@ -163,25 +142,28 @@ export default function ApiKeysPage() {
                 </p>
               </div>
             ) : (
-              <>
+              <div className="flex items-center gap-3">
                 <Input
                   placeholder="Key name"
                   value={newKeyName}
                   onChange={(e) => setNewKeyName(e.target.value)}
+                  className="flex-1"
                 />
-                <DialogFooter>
-                  <Button onClick={handleCreate} disabled={creating}>
-                    {creating ? (
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    ) : null}
-                    Create
-                  </Button>
-                </DialogFooter>
-              </>
+                <button
+                  onClick={handleCreate}
+                  disabled={creating}
+                  className="inline-flex h-8 items-center justify-center rounded-lg bg-primary px-3 text-sm font-medium text-primary-foreground disabled:opacity-50"
+                >
+                  {creating ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : null}
+                  Create
+                </button>
+              </div>
             )}
-          </DialogContent>
-        </Dialog>
-      </div>
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardHeader>

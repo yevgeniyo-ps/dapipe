@@ -20,7 +20,7 @@ export default async function ReposPage() {
     .select("org_id")
     .eq("user_id", user!.id)
     .limit(1)
-    .single();
+    .maybeSingle();
 
   const { data: repos } = await supabase
     .from("repos")

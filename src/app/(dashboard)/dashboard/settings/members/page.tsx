@@ -19,7 +19,7 @@ export default async function MembersPage() {
     .select("org_id")
     .eq("user_id", user!.id)
     .limit(1)
-    .single();
+    .maybeSingle();
 
   const { data: members } = await supabase
     .from("org_members")

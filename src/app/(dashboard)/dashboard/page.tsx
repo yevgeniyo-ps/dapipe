@@ -23,7 +23,7 @@ export default async function DashboardPage() {
     .select("org_id")
     .eq("user_id", user!.id)
     .limit(1)
-    .single();
+    .maybeSingle();
 
   const orgId = membership?.org_id;
 

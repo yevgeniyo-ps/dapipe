@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { createClient } from "@/lib/supabase/client";
+import { useOrgId } from "@/components/org-context";
+import { getPolicy, savePolicy } from "../actions";
 import {
   Card,
   CardContent,
@@ -10,21 +11,13 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Loader2, Save } from "lucide-react";
-import type { Policy, PolicyMode } from "@/lib/types/database";
+import type { PolicyMode } from "@/lib/types/database";
 
 export default function PoliciesPage() {
-  const [policy, setPolicy] = useState<Policy | null>(null);
-  const [orgId, setOrgId] = useState<string | null>(null);
+  const orgId = useOrgId();
+  const [policyId, setPolicyId] = useState<string | null>(null);
   const [mode, setMode] = useState<PolicyMode>("monitor");
   const [allowedDomains, setAllowedDomains] = useState("");
   const [blockedDomains, setBlockedDomains] = useState("");
@@ -33,72 +26,34 @@ export default function PoliciesPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    if (!orgId) { setLoading(false); return; }
     async function load() {
-      const supabase = createClient();
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) return;
-
-      const { data: membership } = await supabase
-        .from("org_members")
-        .select("org_id")
-        .eq("user_id", user.id)
-        .limit(1)
-        .single();
-
-      if (!membership) return;
-      setOrgId(membership.org_id);
-
-      // Load org-wide policy (repo_id is null)
-      const { data } = await supabase
-        .from("policies")
-        .select("*")
-        .eq("org_id", membership.org_id)
-        .is("repo_id", null)
-        .limit(1)
-        .single();
-
-      if (data) {
-        setPolicy(data);
-        setMode(data.mode as PolicyMode);
-        setAllowedDomains(data.allowed_domains.join("\n"));
-        setBlockedDomains(data.blocked_domains.join("\n"));
-        setBlockedIps(data.blocked_ips.join("\n"));
+      try {
+        const data = await getPolicy(orgId!);
+        if (data) {
+          setPolicyId(data.id);
+          setMode(data.mode as PolicyMode);
+          setAllowedDomains(data.allowed_domains.join("\n"));
+          setBlockedDomains(data.blocked_domains.join("\n"));
+          setBlockedIps(data.blocked_ips.join("\n"));
+        }
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
     }
     load();
-  }, []);
+  }, [orgId]);
 
   const handleSave = async () => {
     if (!orgId) return;
     setSaving(true);
-    const supabase = createClient();
 
-    const payload = {
-      org_id: orgId,
-      repo_id: null,
+    await savePolicy(orgId, policyId, {
       mode,
-      allowed_domains: allowedDomains
-        .split("\n")
-        .map((d) => d.trim())
-        .filter(Boolean),
-      blocked_domains: blockedDomains
-        .split("\n")
-        .map((d) => d.trim())
-        .filter(Boolean),
-      blocked_ips: blockedIps
-        .split("\n")
-        .map((d) => d.trim())
-        .filter(Boolean),
-    };
-
-    if (policy) {
-      await supabase.from("policies").update(payload).eq("id", policy.id);
-    } else {
-      await supabase.from("policies").insert(payload);
-    }
+      allowed_domains: allowedDomains.split("\n").map((d) => d.trim()).filter(Boolean),
+      blocked_domains: blockedDomains.split("\n").map((d) => d.trim()).filter(Boolean),
+      blocked_ips: blockedIps.split("\n").map((d) => d.trim()).filter(Boolean),
+    });
 
     setSaving(false);
   };
@@ -134,28 +89,19 @@ export default function PoliciesPage() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <Select
-            value={mode}
-            onValueChange={(v) => setMode(v as PolicyMode)}
-          >
-            <SelectTrigger className="w-48">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="monitor">
-                <Badge variant="secondary" className="mr-2">
-                  monitor
-                </Badge>
-                Warn only
-              </SelectItem>
-              <SelectItem value="restrict">
-                <Badge variant="destructive" className="mr-2">
-                  restrict
-                </Badge>
-                Block unknown
-              </SelectItem>
-            </SelectContent>
-          </Select>
+          <div className="flex items-center gap-3">
+            <select
+              value={mode}
+              onChange={(e) => setMode(e.target.value as PolicyMode)}
+              className="h-8 w-48 rounded-lg border border-input bg-background px-3 text-sm outline-none focus:border-ring focus:ring-3 focus:ring-ring/50"
+            >
+              <option value="monitor">monitor — Warn only</option>
+              <option value="restrict">restrict — Block unknown</option>
+            </select>
+            <Badge variant={mode === "restrict" ? "destructive" : "secondary"}>
+              {mode}
+            </Badge>
+          </div>
         </CardContent>
       </Card>
 
@@ -201,8 +147,9 @@ export default function PoliciesPage() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <Input
-            placeholder="1.2.3.4"
+          <textarea
+            className="w-full min-h-[80px] rounded-md border bg-background px-3 py-2 text-sm font-mono"
+            placeholder={"1.2.3.4\n10.0.0.1"}
             value={blockedIps}
             onChange={(e) => setBlockedIps(e.target.value)}
           />

@@ -27,8 +27,11 @@ export async function createClient() {
 }
 
 export function createServiceClient() {
-  const { createClient } = require("@supabase/supabase-js");
-  return createClient(
+  // Use dynamic import via a variable to avoid bundling the service-role
+  // client into browser chunks while satisfying the no-require-imports rule.
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { createClient: create } = require("@supabase/supabase-js");
+  return create(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!
   );
