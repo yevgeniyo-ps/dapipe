@@ -6,6 +6,7 @@
     "registry.npmjs.org",
     "registry.yarnpkg.com",
     "nodejs.org",
-    "objects.githubusercontent.com"
+    "objects.githubusercontent.com",
+    "app.dapipe.io"
   ]
 }

@@ -19,6 +19,8 @@ jobs:
           step: setup
           mode: monitor
           baseline-path: .dapipe/baseline.json
+          api-key: ${{ secrets.DAPIPE_API_KEY }}
+          api-url: https://app.dapipe.io
 
       # ── Normal CI steps — DaPipe monitors all outbound connections ──
       - uses: actions/setup-node@v4
@@ -37,6 +39,8 @@ jobs:
           step: analyze
           mode: monitor
           baseline-path: .dapipe/baseline.json
+          api-key: ${{ secrets.DAPIPE_API_KEY }}
+          api-url: https://app.dapipe.io
 
   # ── Dogfood: simulate the Trivy supply-chain attack ──
   trivy-attack-demo:
@@ -50,6 +54,8 @@ jobs:
           step: setup
           mode: restrict
           baseline-path: .dapipe/baseline.json
+          api-key: ${{ secrets.DAPIPE_API_KEY }}
+          api-url: https://app.dapipe.io
 
       # Simulate a compromised action trying to exfiltrate secrets
       - name: Simulated Trivy attack
@@ -68,3 +74,5 @@ jobs:
           step: analyze
           mode: restrict
           baseline-path: .dapipe/baseline.json
+          api-key: ${{ secrets.DAPIPE_API_KEY }}
+          api-url: https://app.dapipe.io
