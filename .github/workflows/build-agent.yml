@@ -59,9 +59,10 @@ jobs:
           ARCH="${{ matrix.arch }}"
 
           # Upload as versioned
-          curl -sf -X POST \
+          curl -f -X POST \
             "${SUPABASE_URL}/storage/v1/object/agent/${VERSION}/linux-${ARCH}/dapipe_hook.so" \
             -H "Authorization: Bearer ${SUPABASE_KEY}" \
+            -H "apikey: ${SUPABASE_KEY}" \
             -H "Content-Type: application/octet-stream" \
             -H "x-upsert: true" \
             --data-binary @src/hook/dapipe_hook.so
@@ -78,7 +79,7 @@ jobs:
           SHA="${{ steps.hash.outputs.sha256 }}"
           SIZE="${{ steps.hash.outputs.size }}"
 
-          curl -sf -X POST \
+          curl -f -X POST \
             "${SUPABASE_URL}/rest/v1/agent_binaries" \
             -H "Authorization: Bearer ${SUPABASE_KEY}" \
             -H "apikey: ${SUPABASE_KEY}" \
