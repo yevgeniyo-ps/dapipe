@@ -34,9 +34,19 @@ export async function middleware(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
   const hostname = request.headers.get("host") || "";
 
-  // Admin routes: bo.dapipe.io or /admin path
+  // Admin routes: bo.dapipe.io/admin/* or /admin/* path
+  // Don't gate auth pages (/login, /callback) even on bo. subdomain
+  const isBoSubdomain = hostname.startsWith("bo.");
   const isAdminRoute =
-    hostname.startsWith("bo.") || pathname.startsWith("/admin");
+    (isBoSubdomain && pathname.startsWith("/admin")) ||
+    (!isBoSubdomain && pathname.startsWith("/admin"));
+
+  // On bo. subdomain, redirect root to /admin
+  if (isBoSubdomain && pathname === "/") {
+    const url = request.nextUrl.clone();
+    url.pathname = "/admin";
+    return NextResponse.redirect(url);
+  }
 
   if (isAdminRoute) {
     if (!session) {
@@ -63,6 +73,7 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
+    "/",
     "/dashboard/:path*",
     "/admin/:path*",
     "/login",
