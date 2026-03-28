@@ -93,10 +93,13 @@ if [ -n "${DAPIPE_API_KEY:-}" ]; then
         SAAS_BLOCKED_DOMAINS=$(echo "$SAAS_RESPONSE" | sed -n 's/.*"blocked_domains":\[\([^]]*\)\].*/\1/p' | tr -d '"' | tr ',' '\n' | sed '/^$/d' | paste -sd ',' - || true)
         SAAS_BLOCKED_IPS=$(echo "$SAAS_RESPONSE" | sed -n 's/.*"blocked_ips":\[\([^]]*\)\].*/\1/p' | tr -d '"' | tr ',' '\n' | sed '/^$/d' | paste -sd ',' - || true)
 
-        # SaaS mode overrides local if set
-        if [ -n "$SAAS_MODE" ]; then
-            echo "SaaS policy mode: $SAAS_MODE (overrides local '$MODE')"
+        # SaaS mode: only apply if local mode wasn't explicitly set
+        # The workflow input takes precedence over SaaS policy
+        if [ -n "$SAAS_MODE" ] && [ "$MODE" = "monitor" ]; then
+            echo "SaaS policy mode: $SAAS_MODE"
             MODE="$SAAS_MODE"
+        elif [ -n "$SAAS_MODE" ]; then
+            echo "SaaS policy mode: $SAAS_MODE (local override: $MODE)"
         fi
         # Merge SaaS blocked domains/IPs with local
         if [ -n "$SAAS_BLOCKED_DOMAINS" ]; then
