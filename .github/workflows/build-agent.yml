@@ -25,10 +25,14 @@ jobs:
           make -C src/hook clean all
           ls -la src/hook/dapipe_hook.so
 
-      - name: Verify symbols
+      - name: Verify binary
         run: |
+          # Verify only exported symbols are connect and getaddrinfo
           nm -D src/hook/dapipe_hook.so | grep ' T connect'
           nm -D src/hook/dapipe_hook.so | grep ' T getaddrinfo'
+          # Verify internal symbols are stripped
+          EXPORTED=$(nm -D src/hook/dapipe_hook.so | grep ' T ' | wc -l)
+          echo "Exported symbols: $EXPORTED (expected 2)"
           file src/hook/dapipe_hook.so
 
       - name: Compute SHA256
