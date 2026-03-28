@@ -53,6 +53,7 @@ export interface Report {
   org_id: string;
   repo_id: string | null;
   repo_full_name: string;
+  workflow_name: string;
   run_id: string;
   run_url: string;
   branch: string;
@@ -88,4 +89,90 @@ export interface WaitlistEntry {
 export interface ApprovedUser {
   user_id: string;
   created_at: string;
+}
+
+export type DeploymentStatus =
+  | "pending"
+  | "scanning"
+  | "no_workflows"
+  | "pr_creating"
+  | "pr_open"
+  | "pr_merged"
+  | "pr_closed"
+  | "removing"
+  | "remove_pr_open"
+  | "removed"
+  | "skipped"
+  | "error";
+
+export interface AdminUser {
+  id: string;
+  email: string;
+  name: string | null;
+  created_at: string;
+}
+
+export interface KnownEndpoint {
+  id: string;
+  domain: string;
+  type: "malicious" | "safe";
+  source: string | null;
+  description: string | null;
+  added_by: string | null;
+  created_at: string;
+}
+
+export interface AgentBinary {
+  id: string;
+  version: string;
+  arch: "x86_64" | "arm64";
+  file_size: number | null;
+  sha256_hash: string | null;
+  storage_path: string;
+  is_latest: boolean;
+  uploaded_by: string | null;
+  created_at: string;
+}
+
+export interface AgentDownload {
+  id: string;
+  org_id: string | null;
+  version: string;
+  arch: string;
+  created_at: string;
+}
+
+export interface GitHubInstallation {
+  id: string;
+  org_id: string;
+  installation_id: number;
+  github_org_login: string;
+  github_org_id: number;
+  installed_by: string | null;
+  repository_selection: "all" | "selected";
+  suspended_at: string | null;
+  uninstalled_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface GitHubRepoDeployment {
+  id: string;
+  installation_id: string;
+  org_id: string;
+  repo_id: string | null;
+  github_repo_id: number;
+  github_repo_full_name: string;
+  status: DeploymentStatus;
+  selected: boolean;
+  pr_number: number | null;
+  pr_url: string | null;
+  pr_branch: string | null;
+  workflow_files: string[];
+  error_message: string | null;
+  scanned_at: string | null;
+  pr_created_at: string | null;
+  pr_merged_at: string | null;
+  created_at: string;
+  updated_at: string;
 }

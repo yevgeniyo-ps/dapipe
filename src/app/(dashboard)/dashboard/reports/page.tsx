@@ -1,89 +1,63 @@
 import { createClient } from "@/lib/supabase/server";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import Link from "next/link";
 
 export default async function ReportsPage() {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
+  const { data: { user } } = await supabase.auth.getUser();
   const { data: membership } = await supabase
-    .from("org_members")
-    .select("org_id")
-    .eq("user_id", user!.id)
-    .limit(1)
-    .maybeSingle();
-
+    .from("org_members").select("org_id").eq("user_id", user!.id).limit(1).maybeSingle();
   const { data: reports } = await supabase
-    .from("reports")
-    .select("*")
-    .eq("org_id", membership?.org_id)
-    .order("created_at", { ascending: false })
-    .limit(50);
+    .from("reports").select("*").eq("org_id", membership?.org_id).order("created_at", { ascending: false }).limit(50);
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold">Reports</h1>
+      <h1 className="text-[20px] font-semibold">Reports</h1>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>CI run reports</CardTitle>
-          <CardDescription>
-            Connection reports from all monitored repos
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          {!reports || reports.length === 0 ? (
-            <p className="text-sm text-muted-foreground py-4 text-center">
-              No reports yet.
-            </p>
-          ) : (
-            <div className="space-y-2">
-              {reports.map((report) => (
-                <Link
-                  key={report.id}
-                  href={`/dashboard/reports/${report.id}`}
-                  className="flex items-center justify-between rounded-md border p-3 hover:bg-accent/50 transition-colors"
-                >
-                  <div className="flex flex-col gap-1">
-                    <span className="text-sm font-medium">
-                      {report.repo_full_name}
-                    </span>
-                    <span className="text-xs text-muted-foreground">
-                      {report.branch} &middot;{" "}
-                      {report.commit_sha?.slice(0, 7)} &middot; Run #
-                      {report.run_id} &middot;{" "}
-                      {new Date(report.created_at).toLocaleString()}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Badge variant="outline">
-                      {report.connection_count} connections
+      <div className="rounded-2xl border overflow-hidden">
+        {!reports || reports.length === 0 ? (
+          <p className="text-[13px] text-muted-foreground py-12 text-center">No reports yet.</p>
+        ) : (
+          <table className="w-full border-collapse">
+            <thead>
+              <tr className="border-b">
+                <th className="px-4 py-3 text-left text-[11px] font-semibold text-muted-foreground uppercase tracking-[0.5px]">Pipeline</th>
+                <th className="px-4 py-3 text-left text-[11px] font-semibold text-muted-foreground uppercase tracking-[0.5px]">Branch</th>
+                <th className="px-4 py-3 text-left text-[11px] font-semibold text-muted-foreground uppercase tracking-[0.5px]">Mode</th>
+                <th className="px-4 py-3 text-center text-[11px] font-semibold text-muted-foreground uppercase tracking-[0.5px]">Conn</th>
+                <th className="px-4 py-3 text-right text-[11px] font-semibold text-muted-foreground uppercase tracking-[0.5px]">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {reports.map((r) => (
+                <tr key={r.id} className="border-b last:border-0 hover:bg-accent">
+                  <td className="px-4 py-3">
+                    <Link href={`/dashboard/reports/${r.id}`} className="block hover:underline">
+                      <span className="text-[13px] font-medium block">{r.repo_full_name}</span>
+                      <span className="text-[11px] text-muted-foreground">
+                        {r.workflow_name || `Run #${r.run_id}`}
+                        <span className="mx-1">&middot;</span>
+                        {new Date(r.created_at).toLocaleString()}
+                      </span>
+                    </Link>
+                  </td>
+                  <td className="px-4 py-3">
+                    <span className="text-[12px] font-mono text-secondary-foreground">{r.branch}</span>
+                    <span className="text-[11px] font-mono text-muted-foreground ml-1">{r.commit_sha?.slice(0, 7)}</span>
+                  </td>
+                  <td className="px-4 py-3"><Badge variant="outline">{r.mode}</Badge></td>
+                  <td className="px-4 py-3 text-center text-[13px] text-secondary-foreground">{r.connection_count}</td>
+                  <td className="px-4 py-3 text-right">
+                    <Badge variant={r.blocked_count > 0 ? "destructive" : "secondary"}>
+                      {r.blocked_count > 0 ? `${r.blocked_count} blocked` : "clean"}
                     </Badge>
-                    <Badge
-                      variant={
-                        report.blocked_count > 0 ? "destructive" : "secondary"
-                      }
-                    >
-                      {report.blocked_count > 0
-                        ? `${report.blocked_count} blocked`
-                        : "clean"}
-                    </Badge>
-                  </div>
-                </Link>
+                  </td>
+                </tr>
               ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
+            </tbody>
+          </table>
+        )}
+      </div>
     </div>
   );
 }

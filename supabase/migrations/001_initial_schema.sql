@@ -43,6 +43,7 @@ create table reports (
   org_id uuid not null references organizations(id) on delete cascade,
   repo_id uuid references repos(id) on delete set null,
   repo_full_name text not null,
+  workflow_name text not null default '',
   run_id text not null,
   run_url text not null default '',
   branch text not null default '',

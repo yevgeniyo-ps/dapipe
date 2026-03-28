@@ -79,11 +79,26 @@ export async function GET(request: Request) {
     policy = data;
   }
 
-  // Default response if no policy exists
+  // Fetch global threat intel (malicious endpoints)
+  const { data: maliciousEndpoints } = await supabase
+    .from("known_endpoints")
+    .select("domain")
+    .eq("type", "malicious");
+
+  const threatDomains = (maliciousEndpoints || []).map(
+    (e: { domain: string }) => e.domain
+  );
+
+  // Default response if no policy exists — merge threat intel into blocked list
+  const policyBlocked = policy?.blocked_domains || [];
+  const mergedBlocked = [
+    ...new Set([...policyBlocked, ...threatDomains]),
+  ];
+
   const response: PolicyResponse = {
     mode: policy?.mode || "monitor",
     allowed_domains: policy?.allowed_domains || [],
-    blocked_domains: policy?.blocked_domains || [],
+    blocked_domains: mergedBlocked,
     blocked_ips: policy?.blocked_ips || [],
   };
 

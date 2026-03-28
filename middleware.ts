@@ -31,8 +31,28 @@ export async function middleware(request: NextRequest) {
     data: { session },
   } = await supabase.auth.getSession();
 
+  const pathname = request.nextUrl.pathname;
+  const hostname = request.headers.get("host") || "";
+
+  // Admin routes: bo.dapipe.io or /admin path
+  const isAdminRoute =
+    hostname.startsWith("bo.") || pathname.startsWith("/admin");
+
+  if (isAdminRoute) {
+    if (!session) {
+      const url = request.nextUrl.clone();
+      url.pathname = "/login";
+      return NextResponse.redirect(url);
+    }
+    const { data: isAdmin } = await supabase.rpc("is_admin");
+    if (!isAdmin) {
+      return new NextResponse("Forbidden", { status: 403 });
+    }
+    return supabaseResponse;
+  }
+
   // Protect dashboard routes
-  if (request.nextUrl.pathname.startsWith("/dashboard") && !session) {
+  if (pathname.startsWith("/dashboard") && !session) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
     return NextResponse.redirect(url);
@@ -42,5 +62,11 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/dashboard/:path*", "/login", "/callback", "/waitlist"],
+  matcher: [
+    "/dashboard/:path*",
+    "/admin/:path*",
+    "/login",
+    "/callback",
+    "/waitlist",
+  ],
 };

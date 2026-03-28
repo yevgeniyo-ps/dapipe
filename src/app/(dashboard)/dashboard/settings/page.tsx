@@ -3,13 +3,6 @@
 import { useEffect, useState } from "react";
 import { useOrgId } from "@/components/org-context";
 import { getOrg, saveOrg } from "../actions";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Loader2, Save } from "lucide-react";
@@ -26,13 +19,8 @@ export default function SettingsPage() {
     async function load() {
       try {
         const org = await getOrg(orgId!);
-        if (org) {
-          setOrgName(org.name);
-          setOrgSlug(org.slug);
-        }
-      } finally {
-        setLoading(false);
-      }
+        if (org) { setOrgName(org.name); setOrgSlug(org.slug); }
+      } finally { setLoading(false); }
     }
     load();
   }, [orgId]);
@@ -44,50 +32,26 @@ export default function SettingsPage() {
     setSaving(false);
   };
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center py-20">
-        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-      </div>
-    );
-  }
+  if (loading) return <div className="flex items-center justify-center py-20"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>;
 
   return (
-    <div className="space-y-6">
-      <h1 className="text-2xl font-bold">Settings</h1>
+    <div className="space-y-6 max-w-xl">
+      <h1 className="text-[20px] font-semibold">Settings</h1>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Organization</CardTitle>
-          <CardDescription>Manage your organization settings.</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div>
-            <label className="text-sm font-medium">Name</label>
-            <Input
-              value={orgName}
-              onChange={(e) => setOrgName(e.target.value)}
-              className="mt-1"
-            />
-          </div>
-          <div>
-            <label className="text-sm font-medium">Slug</label>
-            <Input
-              value={orgSlug}
-              onChange={(e) => setOrgSlug(e.target.value)}
-              className="mt-1"
-            />
-          </div>
-          <Button onClick={handleSave} disabled={saving}>
-            {saving ? (
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-            ) : (
-              <Save className="mr-2 h-4 w-4" />
-            )}
-            Save
-          </Button>
-        </CardContent>
-      </Card>
+      <div className="rounded-2xl border p-5 space-y-5">
+        <div>
+          <label className="text-[13px] font-medium text-secondary-foreground mb-2 block">Name</label>
+          <Input value={orgName} onChange={(e) => setOrgName(e.target.value)} />
+        </div>
+        <div>
+          <label className="text-[13px] font-medium text-secondary-foreground mb-2 block">Slug</label>
+          <Input value={orgSlug} onChange={(e) => setOrgSlug(e.target.value)} />
+        </div>
+        <Button onClick={handleSave} disabled={saving} size="sm">
+          {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+          Save
+        </Button>
+      </div>
     </div>
   );
 }

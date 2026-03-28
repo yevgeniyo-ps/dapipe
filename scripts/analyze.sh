@@ -197,6 +197,7 @@ fi
 if [ -n "${DAPIPE_API_KEY:-}" ]; then
     API_URL="${DAPIPE_API_URL:-https://dapipe.io}"
     REPO="${GITHUB_REPOSITORY:-unknown/unknown}"
+    WORKFLOW_NAME="${GITHUB_WORKFLOW:-}"
     RUN_ID="${GITHUB_RUN_ID:-0}"
     RUN_URL="${GITHUB_SERVER_URL:-https://github.com}/${REPO}/actions/runs/${RUN_ID}"
     BRANCH="${GITHUB_REF_NAME:-}"
@@ -219,7 +220,7 @@ if [ -n "${DAPIPE_API_KEY:-}" ]; then
     CONNECTIONS_JSON="${CONNECTIONS_JSON}]"
 
     REPORT_BODY=$(cat <<ENDJSON
-{"repo":"${REPO}","run_id":"${RUN_ID}","run_url":"${RUN_URL}","branch":"${BRANCH}","commit_sha":"${COMMIT}","mode":"${MODE}","connections":${CONNECTIONS_JSON}}
+{"repo":"${REPO}","workflow_name":"${WORKFLOW_NAME}","run_id":"${RUN_ID}","run_url":"${RUN_URL}","branch":"${BRANCH}","commit_sha":"${COMMIT}","mode":"${MODE}","connections":${CONNECTIONS_JSON}}
 ENDJSON
 )
 

@@ -1,0 +1,89 @@
+name: Build Agent Binary
+
+on:
+  push:
+    branches: [main]
+    paths: ['src/hook/**']
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version tag (e.g. 0.1.0)'
+        required: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - arch: x86_64
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build dapipe_hook.so
+        run: |
+          make -C src/hook clean all
+          ls -la src/hook/dapipe_hook.so
+
+      - name: Verify symbols
+        run: |
+          nm -D src/hook/dapipe_hook.so | grep ' T connect'
+          nm -D src/hook/dapipe_hook.so | grep ' T getaddrinfo'
+          file src/hook/dapipe_hook.so
+
+      - name: Compute SHA256
+        id: hash
+        run: |
+          SHA=$(sha256sum src/hook/dapipe_hook.so | cut -d' ' -f1)
+          SIZE=$(stat -c%s src/hook/dapipe_hook.so)
+          echo "sha256=$SHA" >> "$GITHUB_OUTPUT"
+          echo "size=$SIZE" >> "$GITHUB_OUTPUT"
+          echo "SHA256: $SHA"
+          echo "Size: $SIZE bytes"
+
+      - name: Determine version
+        id: version
+        run: |
+          if [ -n "${{ github.event.inputs.version }}" ]; then
+            echo "version=${{ github.event.inputs.version }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "version=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Upload to Supabase Storage
+        env:
+          SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          ARCH="${{ matrix.arch }}"
+
+          # Upload as versioned
+          curl -sf -X POST \
+            "${SUPABASE_URL}/storage/v1/object/agent/${VERSION}/linux-${ARCH}/dapipe_hook.so" \
+            -H "Authorization: Bearer ${SUPABASE_KEY}" \
+            -H "Content-Type: application/octet-stream" \
+            -H "x-upsert: true" \
+            --data-binary @src/hook/dapipe_hook.so
+
+          echo "Uploaded to ${VERSION}/linux-${ARCH}/dapipe_hook.so"
+
+      - name: Upsert agent_binaries record
+        env:
+          SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          ARCH="${{ matrix.arch }}"
+          SHA="${{ steps.hash.outputs.sha256 }}"
+          SIZE="${{ steps.hash.outputs.size }}"
+
+          curl -sf -X POST \
+            "${SUPABASE_URL}/rest/v1/agent_binaries" \
+            -H "Authorization: Bearer ${SUPABASE_KEY}" \
+            -H "apikey: ${SUPABASE_KEY}" \
+            -H "Content-Type: application/json" \
+            -H "Prefer: resolution=merge-duplicates" \
+            -d "{\"version\":\"${VERSION}\",\"arch\":\"${ARCH}\",\"file_size\":${SIZE},\"sha256_hash\":\"${SHA}\",\"storage_path\":\"${VERSION}/linux-${ARCH}/dapipe_hook.so\",\"is_latest\":false}"
+
+          echo "Upserted agent_binaries record for ${VERSION}/${ARCH}"

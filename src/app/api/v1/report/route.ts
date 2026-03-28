@@ -76,6 +76,7 @@ export async function POST(request: Request) {
       org_id: orgId,
       repo_id: repo?.id || null,
       repo_full_name: body.repo,
+      workflow_name: body.workflow_name || "",
       run_id: body.run_id,
       run_url: body.run_url || "",
       branch: body.branch || "",

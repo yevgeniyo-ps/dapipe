@@ -9,7 +9,6 @@ BASELINE_PATH="${3:-}"
 BLOCKED_DOMAINS="${4:-}"
 BLOCKED_IPS="${5:-}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-HOOK_DIR="${SCRIPT_DIR}/../src/hook"
 
 echo "::group::DaPipe setup"
 
@@ -18,16 +17,53 @@ mkdir -p "$LOG_DIR"
 echo "Log directory: $LOG_DIR"
 echo "Mode: $MODE"
 
-# 2. Build the shared library
-echo "Building dapipe_hook.so …"
-make -C "$HOOK_DIR" clean all
-HOOK_SO="$(cd "$HOOK_DIR" && pwd)/dapipe_hook.so"
+# 2. Download or build the hook binary
+HOOK_SO="${LOG_DIR}/dapipe_hook.so"
+API_URL="${DAPIPE_API_URL:-https://app.dapipe.io}"
+
+if [ -n "${DAPIPE_API_KEY:-}" ]; then
+    # Download pre-compiled binary from SaaS
+    ARCH=$(uname -m)
+    [ "$ARCH" = "aarch64" ] && ARCH="arm64"
+    AGENT_VERSION="${DAPIPE_AGENT_VERSION:-latest}"
+    echo "Downloading dapipe_hook.so (arch=$ARCH, version=$AGENT_VERSION) ..."
+
+    HTTP_CODE=$(curl -sf --max-time 30 -w "%{http_code}" \
+        -H "x-dapipe-api-key: $DAPIPE_API_KEY" \
+        -o "$HOOK_SO" \
+        "$API_URL/api/v1/agent?arch=$ARCH&version=$AGENT_VERSION" 2>/dev/null || echo "000")
+
+    if [ "$HTTP_CODE" != "200" ] || [ ! -f "$HOOK_SO" ] || [ ! -s "$HOOK_SO" ]; then
+        echo "::warning::Binary download failed (HTTP $HTTP_CODE). Falling back to local build..."
+        # Fallback: build from source if available
+        HOOK_DIR="${SCRIPT_DIR}/../src/hook"
+        if [ -f "$HOOK_DIR/Makefile" ]; then
+            make -C "$HOOK_DIR" clean all
+            HOOK_SO="$(cd "$HOOK_DIR" && pwd)/dapipe_hook.so"
+        else
+            echo "::error::Failed to download agent binary and no local source available."
+            exit 1
+        fi
+    else
+        echo "Downloaded: $HOOK_SO ($(wc -c < "$HOOK_SO") bytes)"
+    fi
+else
+    # No API key — build from source
+    HOOK_DIR="${SCRIPT_DIR}/../src/hook"
+    if [ -f "$HOOK_DIR/Makefile" ]; then
+        echo "Building dapipe_hook.so from source ..."
+        make -C "$HOOK_DIR" clean all
+        HOOK_SO="$(cd "$HOOK_DIR" && pwd)/dapipe_hook.so"
+    else
+        echo "::error::No DAPIPE_API_KEY set and no local source available. Set DAPIPE_API_KEY to download the agent."
+        exit 1
+    fi
+fi
 
 if [ ! -f "$HOOK_SO" ]; then
-    echo "::error::Failed to build dapipe_hook.so"
+    echo "::error::dapipe_hook.so not found"
     exit 1
 fi
-echo "Built: $HOOK_SO"
 
 # 3. Verify expected symbols are present
 if ! nm -D "$HOOK_SO" 2>/dev/null | grep -q ' T connect'; then

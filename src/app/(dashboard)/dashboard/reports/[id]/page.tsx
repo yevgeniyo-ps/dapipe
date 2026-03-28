@@ -1,157 +1,80 @@
 import { createClient } from "@/lib/supabase/server";
 import { notFound } from "next/navigation";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import Link from "next/link";
 
-export default async function ReportDetailPage({
-  params,
-}: {
-  params: Promise<{ id: string }>;
-}) {
+export default async function ReportDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const supabase = await createClient();
-
-  const { data: report } = await supabase
-    .from("reports")
-    .select("*")
-    .eq("id", id)
-    .single();
-
+  const { data: report } = await supabase.from("reports").select("*").eq("id", id).single();
   if (!report) notFound();
-
-  const { data: connections } = await supabase
-    .from("connections")
-    .select("*")
-    .eq("report_id", id)
-    .order("ts", { ascending: true });
+  const { data: connections } = await supabase.from("connections").select("*").eq("report_id", id).order("ts", { ascending: true });
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-3">
-        <h1 className="text-2xl font-bold">Report</h1>
-        <Badge
-          variant={report.blocked_count > 0 ? "destructive" : "secondary"}
-        >
-          {report.status}
-        </Badge>
+      <div>
+        <div className="flex items-center gap-3">
+          <h1 className="text-[20px] font-semibold">{report.repo_full_name}</h1>
+          <Badge variant={report.blocked_count > 0 ? "destructive" : "secondary"}>{report.status}</Badge>
+        </div>
+        <p className="mt-1 text-[13px] text-muted-foreground">
+          {report.workflow_name && <>{report.workflow_name} &middot; </>}
+          Run #{report.run_id} &middot; {report.branch} &middot; {report.commit_sha?.slice(0, 7)} &middot;{" "}
+          {new Date(report.created_at).toLocaleString()}
+          {report.run_url && (
+            <> &middot; <Link href={report.run_url} target="_blank" className="underline underline-offset-4 hover:text-foreground">GitHub</Link></>
+          )}
+        </p>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>{report.repo_full_name}</CardTitle>
-          <CardDescription>
-            Run #{report.run_id} &middot; {report.branch} &middot;{" "}
-            {report.commit_sha?.slice(0, 7)} &middot;{" "}
-            {new Date(report.created_at).toLocaleString()}
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="grid grid-cols-2 gap-4 sm:grid-cols-4 text-sm">
-          <div>
-            <p className="text-muted-foreground">Mode</p>
-            <p className="font-medium">{report.mode}</p>
+      <div className="grid grid-cols-3 gap-4">
+        {[
+          { label: "Mode", value: report.mode },
+          { label: "Connections", value: report.connection_count },
+          { label: "Blocked", value: report.blocked_count },
+        ].map((m) => (
+          <div key={m.label} className="rounded-2xl border p-4">
+            <span className="text-[12px] font-semibold uppercase tracking-[0.5px] text-muted-foreground">{m.label}</span>
+            <div className="mt-2 text-[28px] font-semibold leading-none">{m.value}</div>
           </div>
-          <div>
-            <p className="text-muted-foreground">Connections</p>
-            <p className="font-medium">{report.connection_count}</p>
-          </div>
-          <div>
-            <p className="text-muted-foreground">Blocked</p>
-            <p className="font-medium">{report.blocked_count}</p>
-          </div>
-          <div>
-            <p className="text-muted-foreground">Run URL</p>
-            {report.run_url ? (
-              <Link
-                href={report.run_url}
-                className="font-medium text-primary hover:underline"
-                target="_blank"
-              >
-                View on GitHub
-              </Link>
-            ) : (
-              <p className="font-medium text-muted-foreground">N/A</p>
-            )}
-          </div>
-        </CardContent>
-      </Card>
+        ))}
+      </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Connections</CardTitle>
-          <CardDescription>
-            {connections?.length || 0} connection events captured
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
+      <div>
+        <h2 className="text-[14px] font-semibold mb-3">Connections</h2>
+        <div className="rounded-2xl border overflow-hidden">
           {!connections || connections.length === 0 ? (
-            <p className="text-sm text-muted-foreground py-4 text-center">
-              No connection data.
-            </p>
+            <p className="text-[13px] text-muted-foreground py-12 text-center">No connection data.</p>
           ) : (
             <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Event</TableHead>
-                    <TableHead>Domain</TableHead>
-                    <TableHead>IP</TableHead>
-                    <TableHead>Port</TableHead>
-                    <TableHead>Process</TableHead>
-                    <TableHead>PID</TableHead>
-                    <TableHead>Time</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
+              <table className="w-full border-collapse">
+                <thead>
+                  <tr className="border-b">
+                    {["Event", "Domain", "IP", "Port", "Process", "PID", "Time"].map((h) => (
+                      <th key={h} className="px-4 py-3 text-left text-[12px] font-semibold text-muted-foreground uppercase tracking-[0.5px]">{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
                   {connections.map((conn) => (
-                    <TableRow key={conn.id}>
-                      <TableCell>
-                        <Badge
-                          variant={
-                            conn.event === "blocked"
-                              ? "destructive"
-                              : "secondary"
-                          }
-                        >
-                          {conn.event}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="font-mono text-xs">
-                        {conn.domain || "-"}
-                      </TableCell>
-                      <TableCell className="font-mono text-xs">
-                        {conn.ip || "-"}
-                      </TableCell>
-                      <TableCell>{conn.port}</TableCell>
-                      <TableCell className="font-mono text-xs">
-                        {conn.process || "-"}
-                      </TableCell>
-                      <TableCell>{conn.pid}</TableCell>
-                      <TableCell className="text-xs text-muted-foreground">
-                        {new Date(conn.ts).toLocaleTimeString()}
-                      </TableCell>
-                    </TableRow>
+                    <tr key={conn.id} className="border-b last:border-0 hover:bg-accent transition-colors">
+                      <td className="px-4 py-3">
+                        <Badge variant={conn.event === "blocked" ? "destructive" : "secondary"}>{conn.event}</Badge>
+                      </td>
+                      <td className="px-4 py-3 font-mono text-[12px]">{conn.domain || "-"}</td>
+                      <td className="px-4 py-3 font-mono text-[12px]">{conn.ip || "-"}</td>
+                      <td className="px-4 py-3 text-[13px]">{conn.port}</td>
+                      <td className="px-4 py-3 font-mono text-[12px]">{conn.process || "-"}</td>
+                      <td className="px-4 py-3 text-[13px]">{conn.pid}</td>
+                      <td className="px-4 py-3 text-[13px] text-muted-foreground">{new Date(conn.ts).toLocaleTimeString()}</td>
+                    </tr>
                   ))}
-                </TableBody>
-              </Table>
+                </tbody>
+              </table>
             </div>
           )}
-        </CardContent>
-      </Card>
+        </div>
+      </div>
     </div>
   );
 }

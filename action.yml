@@ -31,6 +31,10 @@ inputs:
     description: 'DaPipe SaaS API URL'
     required: false
     default: 'https://app.dapipe.io'
+  agent-version:
+    description: 'Version of the agent binary to download (default: latest)'
+    required: false
+    default: 'latest'
   step:
     description: 'Which step to run: "setup" or "analyze"'
     required: true
@@ -53,6 +57,7 @@ runs:
       env:
         DAPIPE_API_KEY: ${{ inputs.api-key }}
         DAPIPE_API_URL: ${{ inputs.api-url }}
+        DAPIPE_AGENT_VERSION: ${{ inputs.agent-version }}
       run: >-
         ${{ github.action_path }}/scripts/setup.sh
         "${{ inputs.log-dir }}"

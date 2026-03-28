@@ -1,8 +1,10 @@
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import { Sidebar } from "@/components/dashboard/sidebar";
+import { DashboardShell } from "@/components/dashboard/dashboard-shell";
 import { Topbar } from "@/components/dashboard/topbar";
 import { OrgProvider } from "@/components/org-context";
+import { SidebarProvider } from "@/components/sidebar-context";
 
 export default async function DashboardLayout({
   children,
@@ -16,7 +18,6 @@ export default async function DashboardLayout({
 
   if (!user) redirect("/login");
 
-  // Run approval check and membership check in parallel
   const [{ data: approved }, { data: memberships }] = await Promise.all([
     supabase.rpc("is_approved"),
     supabase
@@ -31,10 +32,6 @@ export default async function DashboardLayout({
   let orgId = memberships?.[0]?.org_id;
 
   if (!orgId) {
-    // Use service client to bypass RLS for initial org + member creation.
-    // The user session client cannot insert into organizations (no INSERT
-    // policy) and the org_members INSERT policy requires an existing
-    // membership, creating a chicken-and-egg problem for the first member.
     const service = createServiceClient();
 
     const name =
@@ -59,19 +56,19 @@ export default async function DashboardLayout({
 
   return (
     <OrgProvider orgId={orgId!}>
-      <div className="flex h-screen">
-        <Sidebar />
-        <div className="flex flex-1 flex-col overflow-hidden">
-          <Topbar
-            user={{
-              email: user.email,
-              avatar_url: user.user_metadata?.avatar_url,
-              full_name: user.user_metadata?.full_name,
-            }}
-          />
-          <main className="flex-1 overflow-y-auto p-6">{children}</main>
-        </div>
-      </div>
+      <SidebarProvider>
+        <Sidebar
+          user={{
+            email: user.email,
+            avatar_url: user.user_metadata?.avatar_url,
+            full_name: user.user_metadata?.full_name,
+          }}
+        />
+        <DashboardShell>
+          <Topbar />
+          <main className="px-6 pb-8">{children}</main>
+        </DashboardShell>
+      </SidebarProvider>
     </OrgProvider>
   );
 }

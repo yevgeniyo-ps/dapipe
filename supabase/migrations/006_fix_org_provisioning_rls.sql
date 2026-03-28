@@ -1,4 +1,9 @@
 -- 006_fix_org_provisioning_rls.sql
+-- Add workflow_name column + fix missing INSERT policies for org provisioning.
+
+-- Add workflow_name column to reports (was missing from initial schema)
+alter table reports add column if not exists workflow_name text not null default '';
+
 -- Fix missing INSERT policies that prevent auto-provisioning of new orgs.
 --
 -- Problem: When a new approved user first visits the dashboard, the layout
@@ -13,18 +18,24 @@
 -- the flow works even if someone later switches back to the session client.
 
 -- Allow any authenticated user to create an organization.
-create policy "org_insert" on organizations
-  for insert
-  with check (auth.uid() is not null);
+do $$ begin
+  create policy "org_insert" on organizations
+    for insert
+    with check (auth.uid() is not null);
+exception when duplicate_object then null;
+end $$;
 
 -- Allow a user to add themselves as the first member of an org that has
 -- no members yet. Subsequent members can be added by existing members
 -- (covered by the existing members_insert policy).
-create policy "members_self_insert" on org_members
-  for insert
-  with check (
-    user_id = auth.uid()
-    and not exists (
-      select 1 from org_members m where m.org_id = org_members.org_id
-    )
-  );
+do $$ begin
+  create policy "members_self_insert" on org_members
+    for insert
+    with check (
+      user_id = auth.uid()
+      and not exists (
+        select 1 from org_members m where m.org_id = org_members.org_id
+      )
+    );
+exception when duplicate_object then null;
+end $$;

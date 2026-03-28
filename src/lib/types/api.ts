@@ -11,6 +11,7 @@ export interface PolicyResponse {
 // POST /api/v1/report request body
 export interface ReportRequest {
   repo: string;
+  workflow_name?: string;
   run_id: string;
   run_url: string;
   branch: string;
