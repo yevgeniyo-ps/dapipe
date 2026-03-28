@@ -1,6 +1,6 @@
 CC      ?= gcc
 CFLAGS  := -Wall -Wextra -fPIC -shared -O2 -fvisibility=hidden
-LDFLAGS := -ldl -Wl,--version-script=exports.map
+LDFLAGS := -ldl
 TARGET  := dapipe_hook.so
 SRC     := dapipe_hook.c
 
@@ -8,9 +8,9 @@ SRC     := dapipe_hook.c
 
 all: $(TARGET)
 
-$(TARGET): $(SRC) exports.map
+$(TARGET): $(SRC)
 	$(CC) $(CFLAGS) -o $@ $< $(LDFLAGS)
-	strip --strip-debug --strip-unneeded -K connect -K getaddrinfo $@
+	strip --strip-debug $@
 
 clean:
 	rm -f $(TARGET)
