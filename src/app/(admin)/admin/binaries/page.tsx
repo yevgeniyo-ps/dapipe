@@ -27,6 +27,7 @@ interface Binary {
   sha256_hash: string | null;
   storage_path: string;
   is_latest: boolean;
+  download_count: number;
   created_at: string;
 }
 
@@ -189,6 +190,9 @@ export default function BinariesPage() {
                 <th className="px-4 py-3 text-left text-[12px] font-semibold text-muted-foreground uppercase tracking-[0.5px]">
                   Status
                 </th>
+                <th className="px-4 py-3 text-right text-[12px] font-semibold text-muted-foreground uppercase tracking-[0.5px]">
+                  Downloads
+                </th>
                 <th className="px-4 py-3 text-left text-[12px] font-semibold text-muted-foreground uppercase tracking-[0.5px]">
                   Uploaded
                 </th>
@@ -222,6 +226,9 @@ export default function BinariesPage() {
                         --
                       </span>
                     )}
+                  </td>
+                  <td className="px-4 py-3 text-right text-[13px] font-medium tabular-nums">
+                    {b.download_count.toLocaleString()}
                   </td>
                   <td className="px-4 py-3 text-[13px] text-muted-foreground">
                     {new Date(b.created_at).toLocaleDateString()}

@@ -250,13 +250,31 @@ export async function getOrgDetail(orgId: string) {
 export async function listBinaries() {
   const supabase = createServiceClient();
 
-  const { data, error } = await supabase
-    .from("agent_binaries")
-    .select("*")
-    .order("created_at", { ascending: false });
+  const [{ data, error }, { data: downloads }] = await Promise.all([
+    supabase
+      .from("agent_binaries")
+      .select("*")
+      .order("created_at", { ascending: false }),
+    supabase
+      .from("agent_downloads")
+      .select("version, arch"),
+  ]);
 
   if (error) return { error: error.message, binaries: [] };
-  return { error: null, binaries: data || [] };
+
+  // Count downloads per version+arch
+  const downloadCounts: Record<string, number> = {};
+  for (const d of downloads || []) {
+    const key = `${d.version}:${d.arch}`;
+    downloadCounts[key] = (downloadCounts[key] || 0) + 1;
+  }
+
+  const enriched = (data || []).map((b: { version: string; arch: string }) => ({
+    ...b,
+    download_count: downloadCounts[`${b.version}:${b.arch}`] || 0,
+  }));
+
+  return { error: null, binaries: enriched };
 }
 
 export async function uploadBinary(formData: FormData) {
