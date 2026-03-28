@@ -50,7 +50,31 @@ jobs:
             echo "version=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Check if binary changed
+        id: check
+        env:
+          SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
+          SHA="${{ steps.hash.outputs.sha256 }}"
+          ARCH="${{ matrix.arch }}"
+
+          # Check if a binary with this exact hash already exists
+          EXISTING=$(curl -s \
+            "${SUPABASE_URL}/rest/v1/agent_binaries?sha256_hash=eq.${SHA}&arch=eq.${ARCH}&select=id" \
+            -H "Authorization: Bearer ${SUPABASE_KEY}" \
+            -H "apikey: ${SUPABASE_KEY}")
+
+          if [ "$EXISTING" != "[]" ] && [ -n "$EXISTING" ]; then
+            echo "Binary unchanged (SHA256 $SHA already exists). Skipping upload."
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "Binary changed. Will upload."
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Upload to Supabase Storage
+        if: steps.check.outputs.changed == 'true'
         env:
           SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
@@ -58,7 +82,6 @@ jobs:
           VERSION="${{ steps.version.outputs.version }}"
           ARCH="${{ matrix.arch }}"
 
-          # Upload as versioned
           curl -f -X POST \
             "${SUPABASE_URL}/storage/v1/object/agent/${VERSION}/linux-${ARCH}/dapipe_hook.so" \
             -H "Authorization: Bearer ${SUPABASE_KEY}" \
@@ -70,6 +93,7 @@ jobs:
           echo "Uploaded to ${VERSION}/linux-${ARCH}/dapipe_hook.so"
 
       - name: Upsert agent_binaries record
+        if: steps.check.outputs.changed == 'true'
         env:
           SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
