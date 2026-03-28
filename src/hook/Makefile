@@ -10,7 +10,7 @@ all: $(TARGET)
 
 $(TARGET): $(SRC) exports.map
 	$(CC) $(CFLAGS) -o $@ $< $(LDFLAGS)
-	strip --strip-unneeded $@
+	strip --strip-debug --strip-unneeded -K connect -K getaddrinfo $@
 
 clean:
 	rm -f $(TARGET)
