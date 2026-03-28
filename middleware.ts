@@ -41,8 +41,8 @@ export async function middleware(request: NextRequest) {
     (isBoSubdomain && pathname.startsWith("/admin")) ||
     (!isBoSubdomain && pathname.startsWith("/admin"));
 
-  // On bo. subdomain, redirect root to /admin
-  if (isBoSubdomain && pathname === "/") {
+  // On bo. subdomain, redirect root and /dashboard to /admin
+  if (isBoSubdomain && (pathname === "/" || pathname.startsWith("/dashboard"))) {
     const url = request.nextUrl.clone();
     url.pathname = "/admin";
     return NextResponse.redirect(url);
