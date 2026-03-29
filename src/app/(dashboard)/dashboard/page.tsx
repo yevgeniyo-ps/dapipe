@@ -87,16 +87,16 @@ export default function DashboardPage() {
     return true;
   });
 
-  // Group: repo → workflow → job → runs
+  // Group: repo → workflow → run_id → jobs
   const tree: Record<string, Record<string, Record<string, Report[]>>> = {};
   for (const r of filtered) {
     const repo = r.repo_full_name;
     const wf = r.workflow_name || "workflow";
-    const job = r.job_name || "build";
+    const runId = r.run_id;
     if (!tree[repo]) tree[repo] = {};
     if (!tree[repo][wf]) tree[repo][wf] = {};
-    if (!tree[repo][wf][job]) tree[repo][wf][job] = [];
-    tree[repo][wf][job].push(r);
+    if (!tree[repo][wf][runId]) tree[repo][wf][runId] = [];
+    tree[repo][wf][runId].push(r);
   }
 
   const filters: { key: Filter; label: string; count: number }[] = [
@@ -181,31 +181,33 @@ export default function DashboardPage() {
                       {wfBlocked > 0 && <Badge variant="destructive" className="text-[10px]">{wfBlocked}</Badge>}
                     </div>
 
-                    {wfOpen && Object.entries(jobs).map(([job, runs]) => {
-                      const jobKey = `${wfKey}/${job}`;
-                      const jobOpen = expanded.has(jobKey);
-                      const jobBlocked = countBlocked(runs);
+                    {wfOpen && Object.entries(jobs).map(([runId, jobs]) => {
+                      const runKey = `${wfKey}/${runId}`;
+                      const runOpen = expanded.has(runKey);
+                      const runBlocked = countBlocked(jobs);
+                      const firstJob = jobs[0];
 
                       return (
-                        <div key={jobKey}>
-                          {/* ── Job ── */}
-                          <div className="flex items-center gap-3 pl-16 pr-4 py-2 hover:bg-accent cursor-pointer border-t border-border/40" onClick={() => toggle(jobKey)}>
-                            <Chevron open={jobOpen} />
-                            <Cpu className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                            <span className="text-[12px] font-medium flex-1">{job}</span>
-                            <span className="text-[11px] text-muted-foreground">{runs.length} runs</span>
-                            {jobBlocked > 0 && <Badge variant="destructive" className="text-[10px]">{jobBlocked}</Badge>}
+                        <div key={runKey}>
+                          {/* ── Run ID ── */}
+                          <div className="flex items-center gap-3 pl-16 pr-4 py-2 hover:bg-accent cursor-pointer border-t border-border/40" onClick={() => toggle(runKey)}>
+                            <Chevron open={runOpen} />
+                            <span className="text-[12px] font-mono text-muted-foreground">#{runId}</span>
+                            <span className="text-[11px] text-muted-foreground">{timeAgo(firstJob.created_at)}</span>
+                            <div className="flex-1" />
+                            <span className="text-[11px] text-muted-foreground">{jobs.length} job{jobs.length !== 1 ? "s" : ""}</span>
+                            {runBlocked > 0 && <Badge variant="destructive" className="text-[10px]">{runBlocked} blocked</Badge>}
                           </div>
 
-                          {jobOpen && runs.map((r) => {
-                            const isRunOpen = expandedRun === r.id;
+                          {runOpen && jobs.map((r) => {
+                            const isJobOpen = expandedRun === r.id;
                             return (
                               <div key={r.id}>
-                                {/* ── Run ── */}
+                                {/* ── Job ── */}
                                 <div className="flex items-center gap-3 pl-24 pr-4 py-2 hover:bg-accent cursor-pointer border-t border-border/30" onClick={() => toggleRun(r.id)}>
-                                  <Chevron open={isRunOpen} />
-                                  <span className="text-[11px] font-mono text-muted-foreground">#{r.run_id}</span>
-                                  <span className="text-[11px] text-muted-foreground">{timeAgo(r.created_at)}</span>
+                                  <Chevron open={isJobOpen} />
+                                  <Cpu className="h-3 w-3 text-muted-foreground shrink-0" />
+                                  <span className="text-[12px] font-medium">{r.job_name || "build"}</span>
                                   <div className="flex-1" />
                                   <Badge variant="secondary" className={`text-[10px] ${r.mode === "restrict" ? "bg-amber-500/15 text-amber-400" : ""}`}>
                                     {r.mode === "restrict" ? <Shield className="h-2.5 w-2.5 mr-0.5" /> : <Eye className="h-2.5 w-2.5 mr-0.5" />}
@@ -217,7 +219,7 @@ export default function DashboardPage() {
                                   </Badge>
                                 </div>
 
-                                {isRunOpen && (
+                                {isJobOpen && (
                                   <div className="pl-28 pr-4 py-3 bg-accent/20 border-t border-border/30">
                                     {runLoading ? (
                                       <div className="flex items-center justify-center py-4"><Loader2 className="h-4 w-4 animate-spin text-muted-foreground" /></div>
