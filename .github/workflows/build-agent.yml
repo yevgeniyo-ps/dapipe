@@ -1,14 +1,8 @@
 name: Build Agent Binary
 
 on:
-  push:
-    branches: [main]
-    paths: ['src/hook/**']
-  workflow_dispatch:
-    inputs:
-      version:
-        description: 'Version tag (e.g. 0.1.0)'
-        required: true
+  release:
+    types: [published]
 
 jobs:
   build:
@@ -27,13 +21,9 @@ jobs:
 
       - name: Verify binary
         run: |
-          echo "=== All dynamic symbols ==="
-          nm -D src/hook/dapipe_hook.so || true
-          echo "=== File info ==="
+          nm -D src/hook/dapipe_hook.so | grep ' T connect'
+          nm -D src/hook/dapipe_hook.so | grep ' T getaddrinfo'
           file src/hook/dapipe_hook.so
-          ls -la src/hook/dapipe_hook.so
-          # Verify the .so is a valid shared library that can be loaded
-          ldd src/hook/dapipe_hook.so || true
 
       - name: Compute SHA256
         id: hash
@@ -42,43 +32,16 @@ jobs:
           SIZE=$(stat -c%s src/hook/dapipe_hook.so)
           echo "sha256=$SHA" >> "$GITHUB_OUTPUT"
           echo "size=$SIZE" >> "$GITHUB_OUTPUT"
-          echo "SHA256: $SHA"
-          echo "Size: $SIZE bytes"
 
-      - name: Determine version
+      - name: Get version from release tag
         id: version
         run: |
-          if [ -n "${{ github.event.inputs.version }}" ]; then
-            echo "version=${{ github.event.inputs.version }}" >> "$GITHUB_OUTPUT"
-          else
-            echo "version=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Check if binary changed
-        id: check
-        env:
-          SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
-          SUPABASE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-        run: |
-          SHA="${{ steps.hash.outputs.sha256 }}"
-          ARCH="${{ matrix.arch }}"
-
-          # Check if a binary with this exact hash already exists
-          EXISTING=$(curl -s \
-            "${SUPABASE_URL}/rest/v1/agent_binaries?sha256_hash=eq.${SHA}&arch=eq.${ARCH}&select=id" \
-            -H "Authorization: Bearer ${SUPABASE_KEY}" \
-            -H "apikey: ${SUPABASE_KEY}")
-
-          if [ "$EXISTING" != "[]" ] && [ -n "$EXISTING" ]; then
-            echo "Binary unchanged (SHA256 $SHA already exists). Skipping upload."
-            echo "changed=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "Binary changed. Will upload."
-            echo "changed=true" >> "$GITHUB_OUTPUT"
-          fi
+          # Strip leading 'v' from tag name (v0.3.0 -> 0.3.0)
+          VERSION="${GITHUB_REF_NAME#v}"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Version: $VERSION"
 
       - name: Upload to Supabase Storage
-        if: steps.check.outputs.changed == 'true'
         env:
           SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
@@ -97,7 +60,6 @@ jobs:
           echo "Uploaded to ${VERSION}/linux-${ARCH}/dapipe_hook.so"
 
       - name: Upsert agent_binaries record
-        if: steps.check.outputs.changed == 'true'
         env:
           SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
