@@ -30,6 +30,36 @@ static __thread int in_hook = 0;
 /* ── Thread-local hostname buffer for domain ↔ IP correlation ────────── */
 static __thread char tls_hostname[256] = {0};
 
+/* ── Allowed resolved IPs cache ──────────────────────────────────────── */
+/* When getaddrinfo succeeds for an allowed domain, we cache the resolved
+   IPs so that connect() can allow them even without a domain correlation. */
+#define MAX_ALLOWED_IPS 512
+static char allowed_ips[MAX_ALLOWED_IPS][INET6_ADDRSTRLEN];
+static int  allowed_ip_count = 0;
+static pthread_mutex_t allowed_ip_lock = PTHREAD_MUTEX_INITIALIZER;
+
+static void add_allowed_ip(const char *ip) {
+    pthread_mutex_lock(&allowed_ip_lock);
+    if (allowed_ip_count < MAX_ALLOWED_IPS) {
+        strncpy(allowed_ips[allowed_ip_count], ip, INET6_ADDRSTRLEN - 1);
+        allowed_ips[allowed_ip_count][INET6_ADDRSTRLEN - 1] = '\0';
+        allowed_ip_count++;
+    }
+    pthread_mutex_unlock(&allowed_ip_lock);
+}
+
+static int is_allowed_ip(const char *ip) {
+    pthread_mutex_lock(&allowed_ip_lock);
+    for (int i = 0; i < allowed_ip_count; i++) {
+        if (strcmp(allowed_ips[i], ip) == 0) {
+            pthread_mutex_unlock(&allowed_ip_lock);
+            return 1;
+        }
+    }
+    pthread_mutex_unlock(&allowed_ip_lock);
+    return 0;
+}
+
 /* ── Original function pointers (resolved once via dlsym) ────────────── */
 typedef int (*real_connect_t)(int, const struct sockaddr *, socklen_t);
 typedef int (*real_getaddrinfo_t)(const char *, const char *,
@@ -48,7 +78,6 @@ static void resolve_symbols(void) {
 
 /* ── Helpers ─────────────────────────────────────────────────────────── */
 
-/* JSON-escape a string into dst (must be large enough). */
 static void json_escape(char *dst, size_t dstsz, const char *src) {
     size_t j = 0;
     for (size_t i = 0; src[i] && j + 6 < dstsz; i++) {
@@ -64,14 +93,12 @@ static void json_escape(char *dst, size_t dstsz, const char *src) {
     dst[j] = '\0';
 }
 
-/* Get the process name for the current pid. */
 static void get_process_name(char *buf, size_t bufsz) {
     char path[64];
     snprintf(path, sizeof(path), "/proc/%d/comm", getpid());
     FILE *f = fopen(path, "r");
     if (f) {
         if (fgets(buf, bufsz, f)) {
-            /* strip trailing newline */
             size_t len = strlen(buf);
             if (len > 0 && buf[len - 1] == '\n') buf[len - 1] = '\0';
         }
@@ -82,7 +109,6 @@ static void get_process_name(char *buf, size_t bufsz) {
     }
 }
 
-/* Check if a value is in a comma-separated env var list. */
 static int is_in_list(const char *env_var, const char *value) {
     if (!value || !value[0]) return 0;
 
@@ -90,7 +116,7 @@ static int is_in_list(const char *env_var, const char *value) {
     if (!list || !list[0]) return 0;
 
     size_t len = strlen(list);
-    if (len >= 4096) return 0;          /* sanity limit */
+    if (len >= 4096) return 0;
     char buf[4096];
     memcpy(buf, list, len + 1);
 
@@ -105,13 +131,17 @@ static int is_in_list(const char *env_var, const char *value) {
     return 0;
 }
 
+static int is_restrict_mode(void) {
+    const char *allowed = getenv("DAPIPE_ALLOWED_DOMAINS");
+    return (allowed && allowed[0]);
+}
+
 static int is_domain_blocked(const char *domain) {
     if (is_in_list("DAPIPE_BLOCKED_DOMAINS", domain))
         return 1;
 
-    /* Restrict mode: if an allowlist is set, block anything NOT on it. */
-    const char *allowed = getenv("DAPIPE_ALLOWED_DOMAINS");
-    if (allowed && allowed[0]) {
+    /* Restrict mode: block anything NOT on the allowlist. */
+    if (is_restrict_mode()) {
         if (!is_in_list("DAPIPE_ALLOWED_DOMAINS", domain))
             return 1;
     }
@@ -123,7 +153,6 @@ static int is_ip_blocked(const char *ip) {
     return is_in_list("DAPIPE_BLOCKED_IPS", ip);
 }
 
-/* Write a JSON-lines entry atomically (O_APPEND guarantees on Linux). */
 static void emit_log(const char *event, const char *domain,
                      const char *ip, int port) {
     const char *log_dir = getenv("DAPIPE_LOG_DIR");
@@ -157,7 +186,6 @@ static void emit_log(const char *event, const char *domain,
         getpid(), getppid(), esc_proc);
 
     if (len > 0 && (size_t)len < sizeof(line)) {
-        /* Best-effort atomic write */
         (void)write(fd, line, len);
     }
     close(fd);
@@ -187,8 +215,28 @@ int getaddrinfo(const char *node, const char *service,
 
     emit_log("dns", node, "", 0);
 
+    /* Resolve and cache the IPs for allowed domains (restrict mode). */
     in_hook = 0;
-    return real_getaddrinfo(node, service, hints, res);
+    int ret = real_getaddrinfo(node, service, hints, res);
+
+    if (ret == 0 && res && *res && is_restrict_mode()) {
+        /* Cache resolved IPs so connect() can allow them */
+        for (struct addrinfo *rp = *res; rp; rp = rp->ai_next) {
+            char ip_buf[INET6_ADDRSTRLEN] = {0};
+            if (rp->ai_family == AF_INET) {
+                struct sockaddr_in *sa4 = (struct sockaddr_in *)rp->ai_addr;
+                inet_ntop(AF_INET, &sa4->sin_addr, ip_buf, sizeof(ip_buf));
+            } else if (rp->ai_family == AF_INET6) {
+                struct sockaddr_in6 *sa6 = (struct sockaddr_in6 *)rp->ai_addr;
+                inet_ntop(AF_INET6, &sa6->sin6_addr, ip_buf, sizeof(ip_buf));
+            }
+            if (ip_buf[0]) {
+                add_allowed_ip(ip_buf);
+            }
+        }
+    }
+
+    return ret;
 }
 
 /* ── Hooked: connect ─────────────────────────────────────────────────── */
@@ -213,11 +261,11 @@ int connect(int sockfd, const struct sockaddr *addr, socklen_t addrlen) {
         port = ntohs(sa6->sin6_port);
     }
 
-    /* Only log TCP/IP connections (skip AF_UNIX, etc.) */
+    /* Only process TCP/IP connections (skip AF_UNIX, etc.) */
     if (ip_buf[0]) {
         const char *domain = tls_hostname[0] ? tls_hostname : "";
 
-        /* Block connection if IP is on the deny list. */
+        /* Block if IP is on the explicit deny list. */
         if (is_ip_blocked(ip_buf)) {
             emit_log("blocked", domain, ip_buf, port);
             tls_hostname[0] = '\0';
@@ -226,8 +274,16 @@ int connect(int sockfd, const struct sockaddr *addr, socklen_t addrlen) {
             return -1;
         }
 
+        /* In restrict mode, block IPs that weren't resolved from allowed domains. */
+        if (is_restrict_mode() && !is_allowed_ip(ip_buf)) {
+            emit_log("blocked", domain[0] ? domain : ip_buf, ip_buf, port);
+            tls_hostname[0] = '\0';
+            in_hook = 0;
+            errno = ECONNREFUSED;
+            return -1;
+        }
+
         emit_log("connect", domain, ip_buf, port);
-        /* Clear so subsequent connects don't re-use a stale hostname */
         tls_hostname[0] = '\0';
     }
 
