@@ -49,9 +49,14 @@ DIRECT_IPS=""
 if [ -n "$ALL_CONNECT_IPS" ]; then
     while IFS= read -r ip; do
         [ -z "$ip" ] && continue
-        # Skip if it's a resolved IP of a domain
+        # Skip if it's a resolved IP of a domain — BUT keep if it's explicitly in the allowed policy
         if [ -n "$RESOLVED_IPS" ] && echo "$RESOLVED_IPS" | grep -qxF "$ip"; then
-            continue
+            # Keep if it's an explicitly allowed IP (from BO or customer policy)
+            if [ -n "$POLICY_ALLOWED" ] && echo "$POLICY_ALLOWED" | grep -qxF "$ip"; then
+                :  # keep it
+            else
+                continue
+            fi
         fi
         # Skip loopback
         [ "$ip" = "127.0.0.1" ] || [ "$ip" = "::1" ] && continue
