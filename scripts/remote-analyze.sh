@@ -123,9 +123,6 @@ while IFS= read -r line; do
 done < "$LOG_FILE"
 CONNECTIONS="$CONNECTIONS]"
 
-DURATION=""
-[ -n "${DAPIPE_SETUP_START:-}" ] && DURATION=$(($(date +%s) - DAPIPE_SETUP_START))
-
 BODY="{\"repo\":\"${REPO}\",\"workflow_name\":\"${GITHUB_WORKFLOW:-}\",\"run_id\":\"${GITHUB_RUN_ID:-0}\",\"run_url\":\"${GITHUB_SERVER_URL:-https://github.com}/${REPO}/actions/runs/${GITHUB_RUN_ID:-0}\",\"branch\":\"${GITHUB_REF_NAME:-}\",\"commit_sha\":\"${GITHUB_SHA:-}\",\"mode\":\"${MODE}\",\"connections\":${CONNECTIONS}}"
 
 curl -sf --max-time 15 \
@@ -167,7 +164,6 @@ if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
         echo "| Allowed | $A_COUNT |"
         [ "$E_COUNT" -gt 0 ] && echo "| $L_EXIST | $E_COUNT |"
         [ "$N_COUNT" -gt 0 ] && echo "| $L_NEW | $N_COUNT |"
-        [ -n "$DURATION" ] && echo "| Pipeline duration | ${DURATION}s |"
         echo ""
 
         if [ -n "$ALLOWED" ]; then
