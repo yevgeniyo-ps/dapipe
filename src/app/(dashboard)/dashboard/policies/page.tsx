@@ -8,12 +8,10 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Loader2, Save, Plus, X, Lock } from "lucide-react";
-import type { PolicyMode } from "@/lib/types/database";
 
 export default function PoliciesPage() {
   const orgId = useOrgId();
   const [policyId, setPolicyId] = useState<string | null>(null);
-  const [mode, setMode] = useState<PolicyMode>("monitor");
   const [baseAllowed, setBaseAllowed] = useState<string[]>([]);
   const [baseBlocked, setBaseBlocked] = useState<string[]>([]);
   const [customerAllowed, setCustomerAllowed] = useState<string[]>([]);
@@ -36,7 +34,6 @@ export default function PoliciesPage() {
       setBaseBlocked(base.blocked);
       if (policy) {
         setPolicyId(policy.id);
-        setMode(policy.mode as PolicyMode);
         setCustomerAllowed(policy.allowed_domains || []);
         setCustomerBlocked(policy.blocked_domains || []);
         setBlockedIps(policy.blocked_ips || []);
@@ -51,7 +48,7 @@ export default function PoliciesPage() {
     if (!orgId) return;
     setSaving(true);
     await savePolicy(orgId, policyId, {
-      mode,
+      mode: "restrict",
       allowed_domains: customerAllowed,
       blocked_domains: customerBlocked,
       blocked_ips: blockedIps,
@@ -91,20 +88,6 @@ export default function PoliciesPage() {
           {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
           Save
         </Button>
-      </div>
-
-      {/* Mode */}
-      <div className="rounded-2xl border p-5">
-        <label className="text-[12px] font-semibold uppercase tracking-[0.5px] text-muted-foreground">Mode</label>
-        <p className="text-[13px] text-muted-foreground mt-1 mb-3">Monitor warns on new domains. Restrict blocks everything not in the allowed list.</p>
-        <div className="flex items-center gap-3">
-          <select value={mode} onChange={(e) => setMode(e.target.value as PolicyMode)}
-            className="h-9 w-48 rounded-md border bg-input px-3 text-[14px] outline-none focus:ring-2 focus:ring-ring/30">
-            <option value="monitor">monitor — Warn only</option>
-            <option value="restrict">restrict — Block unknown</option>
-          </select>
-          <Badge variant={mode === "restrict" ? "destructive" : "secondary"}>{mode}</Badge>
-        </div>
       </div>
 
       {/* Allowed domains */}
