@@ -110,7 +110,7 @@ export default function DashboardPage() {
   const Chevron = ({ open }: { open: boolean }) =>
     open ? <ChevronDown className="h-3.5 w-3.5 text-muted-foreground shrink-0" /> : <ChevronRight className="h-3.5 w-3.5 text-muted-foreground shrink-0" />;
 
-  const countBlocked = (reports: Report[]) => reports.filter((r) => r.blocked_count > 0).length;
+  const countBlocked = (reports: Report[]) => reports.reduce((sum, r) => sum + r.blocked_count, 0);
 
   return (
     <div className="space-y-6">
