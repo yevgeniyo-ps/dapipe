@@ -330,6 +330,99 @@ export async function getBaseEndpoints() {
   return { allowed: safe, blocked: malicious };
 }
 
+// ── Quick policy actions (from dashboard) ─────────────────
+
+export async function addToAllowed(orgId: string, target: string) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+
+  // Get or create org-wide policy
+  let { data: policy } = await supabase
+    .from("policies")
+    .select("id, allowed_domains")
+    .eq("org_id", orgId)
+    .is("repo_id", null)
+    .maybeSingle();
+
+  const current = policy?.allowed_domains || [];
+  if (current.includes(target)) return;
+
+  if (policy) {
+    await supabase
+      .from("policies")
+      .update({ allowed_domains: [...current, target] })
+      .eq("id", policy.id);
+  } else {
+    await supabase
+      .from("policies")
+      .insert({ org_id: orgId, mode: "restrict", allowed_domains: [target], blocked_domains: [], blocked_ips: [] });
+  }
+
+  await supabase.from("audit_log").insert({
+    org_id: orgId,
+    user_id: user?.id,
+    action: "add_to_allowed",
+    target,
+    details: { source: "dashboard" },
+  });
+
+  revalidatePath("/dashboard");
+}
+
+export async function addToBlocked(orgId: string, target: string) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  const isIp = /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(target);
+
+  let { data: policy } = await supabase
+    .from("policies")
+    .select("id, blocked_domains, blocked_ips")
+    .eq("org_id", orgId)
+    .is("repo_id", null)
+    .maybeSingle();
+
+  if (isIp) {
+    const current = policy?.blocked_ips || [];
+    if (current.includes(target)) return;
+    if (policy) {
+      await supabase.from("policies").update({ blocked_ips: [...current, target] }).eq("id", policy.id);
+    } else {
+      await supabase.from("policies").insert({ org_id: orgId, mode: "restrict", allowed_domains: [], blocked_domains: [], blocked_ips: [target] });
+    }
+  } else {
+    const current = policy?.blocked_domains || [];
+    if (current.includes(target)) return;
+    if (policy) {
+      await supabase.from("policies").update({ blocked_domains: [...current, target] }).eq("id", policy.id);
+    } else {
+      await supabase.from("policies").insert({ org_id: orgId, mode: "restrict", allowed_domains: [], blocked_domains: [target], blocked_ips: [] });
+    }
+  }
+
+  await supabase.from("audit_log").insert({
+    org_id: orgId,
+    user_id: user?.id,
+    action: "add_to_blocked",
+    target,
+    details: { source: "dashboard", type: isIp ? "ip" : "domain" },
+  });
+
+  revalidatePath("/dashboard");
+}
+
+// ── Audit Log ─────────────────────────────────────────────
+
+export async function getAuditLog(orgId: string) {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("audit_log")
+    .select("*")
+    .eq("org_id", orgId)
+    .order("created_at", { ascending: false })
+    .limit(50);
+  return data || [];
+}
+
 // ── Settings ───────────────────────────────────────────────
 
 export async function getOrg(orgId: string) {

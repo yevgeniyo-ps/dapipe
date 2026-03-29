@@ -10,6 +10,7 @@ import {
   Shield,
   FileBarChart,
   Rocket,
+  ClipboardList,
   Settings,
   Key,
   Users,
@@ -31,6 +32,7 @@ const navigation = [
   { name: "Egress Rules", href: "/dashboard/policies", icon: Shield },
   { name: "Reports", href: "/dashboard/reports", icon: FileBarChart },
   { name: "Deploy", href: "/dashboard/deploy", icon: Rocket },
+  { name: "Audit", href: "/dashboard/audit", icon: ClipboardList },
 ];
 
 const settingsNav = [

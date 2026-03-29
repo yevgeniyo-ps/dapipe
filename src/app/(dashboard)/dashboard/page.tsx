@@ -3,12 +3,12 @@
 import { useEffect, useState, useCallback } from "react";
 import { useInterval } from "@/lib/use-interval";
 import { useOrgId } from "@/components/org-context";
-import { getDashboardOverview, getReportDetail } from "./actions";
+import { getDashboardOverview, getReportDetail, getBaseEndpoints, getPolicy, addToAllowed, addToBlocked } from "./actions";
 import { Badge } from "@/components/ui/badge";
 import {
   GitFork, ShieldCheck, FileBarChart, AlertTriangle, Activity,
   Eye, Shield, Loader2, ChevronDown, ChevronRight, ExternalLink,
-  Check, Ban, Cpu,
+  Check, Ban, Cpu, CircleAlert,
 } from "lucide-react";
 
 type Filter = "all" | "clean" | "blocked" | "monitor" | "restrict";
@@ -246,19 +246,66 @@ export default function DashboardPage() {
 }
 
 function RunDetail({ report: r, detail }: { report: Report; detail: any }) {
+  const orgId = useOrgId();
+  const [policy, setPolicy] = useState<any>(null);
+  const [base, setBase] = useState<{ allowed: string[]; blocked: string[] }>({ allowed: [], blocked: [] });
+  const [loaded, setLoaded] = useState(false);
+
+  useEffect(() => {
+    if (!orgId) return;
+    Promise.all([getPolicy(orgId), getBaseEndpoints()]).then(([p, b]) => {
+      setPolicy(p);
+      setBase(b);
+      setLoaded(true);
+    });
+  }, [orgId]);
+
   const conns = detail?.connections || [];
 
-  const uniqueAllowed = [...new Set(
-    conns.filter((c: any) => c.event !== "blocked")
-      .map((c: any) => c.domain)
-      .filter((d: string) => d && !d.match(/^app\.dapipe/))
+  // All policy allowed/blocked
+  const allAllowed = new Set([...(base.allowed || []), ...(policy?.allowed_domains || [])]);
+  const allBlocked = new Set([...(base.blocked || []), ...(policy?.blocked_domains || []), ...(policy?.blocked_ips || [])]);
+  const isBase = (t: string) => base.allowed.includes(t) || base.blocked.includes(t);
+
+  // Unique targets from connections
+  const allowedTargets = [...new Set(
+    conns.filter((c: any) => c.event !== "blocked").map((c: any) => c.domain).filter((d: string) => d && !d.match(/^app\.dapipe/))
+  )] as string[];
+  const blockedTargets = [...new Set(
+    conns.filter((c: any) => c.event === "blocked").map((c: any) => c.domain || c.ip).filter(Boolean)
   )] as string[];
 
-  const uniqueBlocked = [...new Set(
-    conns.filter((c: any) => c.event === "blocked")
-      .map((c: any) => c.domain || c.ip)
-      .filter(Boolean)
-  )] as string[];
+  // Categorize
+  type Category = "allowed" | "blocked_existing" | "blocked_new" | "new";
+  const targets: { target: string; category: Category }[] = [];
+
+  for (const t of allowedTargets) {
+    if (allAllowed.has(t)) targets.push({ target: t, category: "allowed" });
+    else targets.push({ target: t, category: "new" });
+  }
+  for (const t of blockedTargets) {
+    if (allBlocked.has(t)) targets.push({ target: t, category: "blocked_existing" });
+    else targets.push({ target: t, category: "blocked_new" });
+  }
+
+  const handleAllow = async (target: string) => {
+    if (!orgId) return;
+    await addToAllowed(orgId, target);
+  };
+
+  const handleBlock = async (target: string) => {
+    if (!orgId) return;
+    await addToBlocked(orgId, target);
+  };
+
+  const statusLabel = (cat: Category) => {
+    switch (cat) {
+      case "allowed": return <span className="inline-flex items-center gap-1.5 text-[12px] text-muted-foreground"><Check className="h-3 w-3" /> allowed</span>;
+      case "blocked_existing": return <span className="inline-flex items-center gap-1.5 text-[12px] text-destructive"><Ban className="h-3 w-3" /> blocked</span>;
+      case "blocked_new": return <span className="inline-flex items-center gap-1.5 text-[12px] text-amber-400"><CircleAlert className="h-3 w-3" /> blocked (new)</span>;
+      case "new": return <span className="inline-flex items-center gap-1.5 text-[12px] text-amber-400"><CircleAlert className="h-3 w-3" /> new</span>;
+    }
+  };
 
   return (
     <div className="space-y-3">
@@ -272,25 +319,28 @@ function RunDetail({ report: r, detail }: { report: Report; detail: any }) {
         )}
       </div>
 
-      {(uniqueAllowed.length > 0 || uniqueBlocked.length > 0) ? (
+      {targets.length > 0 ? (
         <table className="w-full border-collapse rounded-lg border overflow-hidden">
           <thead>
             <tr className="border-b bg-muted/30">
               <th className="px-3 py-2 text-left text-[11px] font-semibold text-muted-foreground uppercase tracking-[0.5px]">Target</th>
               <th className="px-3 py-2 text-left text-[11px] font-semibold text-muted-foreground uppercase tracking-[0.5px]">Status</th>
+              <th className="px-3 py-2 text-right text-[11px] font-semibold text-muted-foreground uppercase tracking-[0.5px]">Actions</th>
             </tr>
           </thead>
           <tbody>
-            {uniqueAllowed.map((t) => (
-              <tr key={`a-${t}`} className="border-b last:border-0">
-                <td className="px-3 py-2 text-[12px] font-mono">{t}</td>
-                <td className="px-3 py-2"><span className="inline-flex items-center gap-1.5 text-[12px] text-muted-foreground"><Check className="h-3 w-3" /> allowed</span></td>
-              </tr>
-            ))}
-            {uniqueBlocked.map((t) => (
-              <tr key={`b-${t}`} className="border-b last:border-0">
-                <td className="px-3 py-2 text-[12px] font-mono">{t}</td>
-                <td className="px-3 py-2"><span className="inline-flex items-center gap-1.5 text-[12px] text-destructive"><Ban className="h-3 w-3" /> blocked</span></td>
+            {targets.map(({ target, category }) => (
+              <tr key={target} className="border-b last:border-0">
+                <td className="px-3 py-2 text-[12px] font-mono">{target}</td>
+                <td className="px-3 py-2">{statusLabel(category)}</td>
+                <td className="px-3 py-2 text-right">
+                  {(category === "new" || category === "blocked_new") && loaded && !isBase(target) && (
+                    <div className="inline-flex gap-1">
+                      <button onClick={() => handleAllow(target)} className="rounded px-2 py-0.5 text-[11px] border hover:bg-accent">Allow</button>
+                      <button onClick={() => handleBlock(target)} className="rounded px-2 py-0.5 text-[11px] border border-destructive/30 text-destructive hover:bg-destructive/10">Block</button>
+                    </div>
+                  )}
+                </td>
               </tr>
             ))}
           </tbody>
