@@ -151,8 +151,36 @@ int getaddrinfo(const char *node, const char *service,
     }
 
     emit_log("dns", node, "", 0);
+
+    /* Resolve, then write resolved IPs to a file so the analyze script
+       can distinguish resolved IPs from direct IP connections. */
     in_hook = 0;
-    return real_getaddrinfo(node, service, hints, res);
+    int ret = real_getaddrinfo(node, service, hints, res);
+
+    if (ret == 0 && res && *res) {
+        const char *log_dir = getenv("DAPIPE_LOG_DIR");
+        if (log_dir && log_dir[0]) {
+            char rpath[512];
+            snprintf(rpath, sizeof(rpath), "%s/resolved_ips.txt", log_dir);
+            int rfd = open(rpath, O_WRONLY | O_CREAT | O_APPEND, 0644);
+            if (rfd >= 0) {
+                for (struct addrinfo *rp = *res; rp; rp = rp->ai_next) {
+                    char ip[INET6_ADDRSTRLEN] = {0};
+                    if (rp->ai_family == AF_INET)
+                        inet_ntop(AF_INET, &((struct sockaddr_in *)rp->ai_addr)->sin_addr, ip, sizeof(ip));
+                    else if (rp->ai_family == AF_INET6)
+                        inet_ntop(AF_INET6, &((struct sockaddr_in6 *)rp->ai_addr)->sin6_addr, ip, sizeof(ip));
+                    if (ip[0]) {
+                        (void)write(rfd, ip, strlen(ip));
+                        (void)write(rfd, "\n", 1);
+                    }
+                }
+                close(rfd);
+            }
+        }
+    }
+
+    return ret;
 }
 
 /* ── connect hook ──────────────────────────────────────────────────── */

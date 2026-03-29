@@ -28,15 +28,40 @@ if [ -n "$POLICY" ]; then
 fi
 
 # ── Extract targets ─────────────────────────────────────────────────
-# ONLY from getaddrinfo events (dns + blocked). Never from connect events.
-# This gives us exactly what processes tried to reach:
-#   - Domains: example.com, icanhazip.com, ifconfig.me
-#   - Literal IPs: 1.1.1.1, 1.1.1.2 (if getaddrinfo was called)
-# Never gives us resolved IPs (104.x) or TLS secondary connections.
-TARGETS=$(grep -E '"event":"(dns|blocked)"' "$LOG_FILE" \
+# 1. Domains from dns/blocked events (getaddrinfo calls)
+DNS_TARGETS=$(grep -E '"event":"(dns|blocked)"' "$LOG_FILE" \
     | sed -n 's/.*"domain":"\([^"]*\)".*/\1/p' \
     | grep -v "^${DAPIPE_HOST}$" \
     | sort -u | grep -v '^$' || true)
+
+# 2. Direct IPs from connect events — IPs NOT in the resolved_ips file
+#    The hook writes resolved IPs to resolved_ips.txt during getaddrinfo.
+#    Any IP in a connect event that's NOT in that file = direct IP connection.
+RESOLVED_FILE="$DAPIPE_LOG_DIR/resolved_ips.txt"
+RESOLVED_IPS=""
+[ -f "$RESOLVED_FILE" ] && RESOLVED_IPS=$(sort -u "$RESOLVED_FILE" | grep -v '^$' || true)
+
+# Get all unique IPs from connect/blocked events
+ALL_CONNECT_IPS=$(sed -n 's/.*"ip":"\([^"]*\)".*/\1/p' "$LOG_FILE" \
+    | sort -u | grep -v '^$' || true)
+
+DIRECT_IPS=""
+if [ -n "$ALL_CONNECT_IPS" ]; then
+    while IFS= read -r ip; do
+        [ -z "$ip" ] && continue
+        # Skip if it's a resolved IP of a domain
+        if [ -n "$RESOLVED_IPS" ] && echo "$RESOLVED_IPS" | grep -qxF "$ip"; then
+            continue
+        fi
+        # Skip loopback
+        [ "$ip" = "127.0.0.1" ] || [ "$ip" = "::1" ] && continue
+        DIRECT_IPS="${DIRECT_IPS}${ip}"$'\n'
+    done <<< "$ALL_CONNECT_IPS"
+fi
+DIRECT_IPS=$(echo "$DIRECT_IPS" | sed '/^$/d' || true)
+
+# Merge: dns targets + direct IPs
+TARGETS=$(printf '%s\n%s' "$DNS_TARGETS" "$DIRECT_IPS" | sort -u | grep -v '^$' || true)
 
 BLOCKED=$(grep '"event":"blocked"' "$LOG_FILE" \
     | sed -n 's/.*"domain":"\([^"]*\)".*/\1/p' \
