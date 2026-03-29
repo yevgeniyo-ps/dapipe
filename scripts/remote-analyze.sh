@@ -19,20 +19,72 @@ if [ -z "$FILTERED" ]; then
     exit 0
 fi
 
-# Unique domains and IPs
+# Fetch policy to know what's allowed/blocked
+REPO="${GITHUB_REPOSITORY:-unknown/unknown}"
+POLICY=$(curl -sf --max-time 10 \
+    -H "x-dapipe-api-key: $DAPIPE_API_KEY" \
+    "$DAPIPE_API_URL/api/v1/policy?repo=$REPO" 2>/dev/null || true)
+
+POLICY_ALLOWED=""
+POLICY_BLOCKED=""
+POLICY_BLOCKED_IPS=""
+if [ -n "$POLICY" ]; then
+    POLICY_ALLOWED=$(echo "$POLICY" | sed -n 's/.*"allowed_domains":\[\([^]]*\)\].*/\1/p' | tr -d '"' | tr ',' '\n' | sed '/^$/d' || true)
+    POLICY_BLOCKED=$(echo "$POLICY" | sed -n 's/.*"blocked_domains":\[\([^]]*\)\].*/\1/p' | tr -d '"' | tr ',' '\n' | sed '/^$/d' || true)
+    POLICY_BLOCKED_IPS=$(echo "$POLICY" | sed -n 's/.*"blocked_ips":\[\([^]]*\)\].*/\1/p' | tr -d '"' | tr ',' '\n' | sed '/^$/d' || true)
+fi
+
+# Unique observed domains and IPs
 ALL_DOMAINS=$(echo "$FILTERED" | sed -n 's/.*"domain":"\([^"]*\)".*/\1/p' | sort -u | grep -v '^$' || true)
+ALL_IPS=$(echo "$FILTERED" | sed -n 's/.*"ip":"\([^"]*\)".*/\1/p' | sort -u | grep -v '^$' || true)
 BLOCKED_DOMAINS=$(echo "$FILTERED" | grep '"blocked"' | sed -n 's/.*"domain":"\([^"]*\)".*/\1/p' | sort -u | grep -v '^$' || true)
 BLOCKED_IPS=$(echo "$FILTERED" | grep '"blocked"' | sed -n 's/.*"ip":"\([^"]*\)".*/\1/p' | sort -u | grep -v '^$' || true)
-ALLOWED_DOMAINS=$(echo "$FILTERED" | grep -v '"blocked"' | sed -n 's/.*"domain":"\([^"]*\)".*/\1/p' | sort -u | grep -v '^$' || true)
 
-ALLOWED_COUNT=0
-[ -n "$ALLOWED_DOMAINS" ] && ALLOWED_COUNT=$(echo "$ALLOWED_DOMAINS" | wc -l | tr -d ' ')
+# Categorize domains: known-allowed, known-blocked, new (unknown)
+KNOWN_ALLOWED=""
+NEW_DOMAINS=""
+NEW_IPS=""
+
+if [ -n "$ALL_DOMAINS" ]; then
+    while IFS= read -r d; do
+        [ -z "$d" ] && continue
+        if [ -n "$POLICY_ALLOWED" ] && echo "$POLICY_ALLOWED" | grep -qxF "$d"; then
+            KNOWN_ALLOWED="${KNOWN_ALLOWED}${d}"$'\n'
+        elif [ -n "$POLICY_BLOCKED" ] && echo "$POLICY_BLOCKED" | grep -qxF "$d"; then
+            : # already in blocked list
+        else
+            NEW_DOMAINS="${NEW_DOMAINS}${d}"$'\n'
+        fi
+    done <<< "$ALL_DOMAINS"
+fi
+
+# IPs: check against blocked IPs policy
+if [ -n "$ALL_IPS" ]; then
+    while IFS= read -r ip; do
+        [ -z "$ip" ] && continue
+        if [ -n "$POLICY_BLOCKED_IPS" ] && echo "$POLICY_BLOCKED_IPS" | grep -qxF "$ip"; then
+            : # already in blocked IPs
+        elif [ -n "$POLICY_ALLOWED" ]; then
+            # IP not in any list = new
+            NEW_IPS="${NEW_IPS}${ip}"$'\n'
+        fi
+    done <<< "$ALL_IPS"
+fi
+
+KNOWN_ALLOWED=$(echo "$KNOWN_ALLOWED" | sed '/^$/d' || true)
+NEW_DOMAINS=$(echo "$NEW_DOMAINS" | sed '/^$/d' || true)
+NEW_IPS=$(echo "$NEW_IPS" | sed '/^$/d' || true)
+
+KNOWN_ALLOWED_COUNT=0
+[ -n "$KNOWN_ALLOWED" ] && KNOWN_ALLOWED_COUNT=$(echo "$KNOWN_ALLOWED" | wc -l | tr -d ' ')
+NEW_DOMAIN_COUNT=0
+[ -n "$NEW_DOMAINS" ] && NEW_DOMAIN_COUNT=$(echo "$NEW_DOMAINS" | wc -l | tr -d ' ')
+NEW_IP_COUNT=0
+[ -n "$NEW_IPS" ] && NEW_IP_COUNT=$(echo "$NEW_IPS" | wc -l | tr -d ' ')
 BLOCKED_DOMAIN_COUNT=0
 [ -n "$BLOCKED_DOMAINS" ] && BLOCKED_DOMAIN_COUNT=$(echo "$BLOCKED_DOMAINS" | wc -l | tr -d ' ')
 BLOCKED_IP_COUNT=0
 [ -n "$BLOCKED_IPS" ] && BLOCKED_IP_COUNT=$(echo "$BLOCKED_IPS" | wc -l | tr -d ' ')
-ALL_DOMAIN_COUNT=0
-[ -n "$ALL_DOMAINS" ] && ALL_DOMAIN_COUNT=$(echo "$ALL_DOMAINS" | wc -l | tr -d ' ')
 TOTAL_BLOCKED=$((BLOCKED_DOMAIN_COUNT + BLOCKED_IP_COUNT))
 
 # Build connections JSON from full log
@@ -46,7 +98,6 @@ done < "$LOG_FILE"
 CONNECTIONS="$CONNECTIONS]"
 
 # Upload to SaaS
-REPO="${GITHUB_REPOSITORY:-unknown/unknown}"
 DURATION=""
 [ -n "${DAPIPE_SETUP_START:-}" ] && DURATION=$(($(date +%s) - DAPIPE_SETUP_START))
 
@@ -63,7 +114,6 @@ STATUS=$(echo "$RESULT" | sed -n 's/.*"status":"\([^"]*\)".*/\1/p')
 
 # GitHub annotations
 if [ "$MODE" = "restrict" ]; then
-    # Restrict: errors for blocked
     [ -n "$BLOCKED_DOMAINS" ] && echo "$BLOCKED_DOMAINS" | while IFS= read -r d; do
         [ -n "$d" ] && echo "::error::DaPipe: blocked connection to $d"
     done
@@ -71,9 +121,11 @@ if [ "$MODE" = "restrict" ]; then
         [ -n "$ip" ] && echo "::error::DaPipe: blocked connection to IP $ip"
     done
 else
-    # Monitor: warnings for all observed domains (informational)
-    [ -n "$ALL_DOMAINS" ] && echo "$ALL_DOMAINS" | while IFS= read -r d; do
-        [ -n "$d" ] && echo "::warning::DaPipe: observed egress to $d"
+    [ -n "$NEW_DOMAINS" ] && echo "$NEW_DOMAINS" | while IFS= read -r d; do
+        [ -n "$d" ] && echo "::warning::DaPipe: new observed domain $d"
+    done
+    [ -n "$NEW_IPS" ] && echo "$NEW_IPS" | while IFS= read -r ip; do
+        [ -n "$ip" ] && echo "::warning::DaPipe: new observed IP $ip"
     done
 fi
 
@@ -85,29 +137,32 @@ if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
         echo "| Metric | Value |"
         echo "|--------|-------|"
         echo "| Mode | \`$MODE\` |"
+        echo "| Allowed domains | $KNOWN_ALLOWED_COUNT |"
 
         if [ "$MODE" = "restrict" ]; then
-            echo "| Allowed domains | $ALLOWED_COUNT |"
             echo "| Blocked domains | $BLOCKED_DOMAIN_COUNT |"
             echo "| Blocked IPs | $BLOCKED_IP_COUNT |"
         else
-            echo "| Observed domains | $ALL_DOMAIN_COUNT |"
+            echo "| New observed domains | $NEW_DOMAIN_COUNT |"
+            echo "| New observed IPs | $NEW_IP_COUNT |"
         fi
         [ -n "$DURATION" ] && echo "| Pipeline duration | ${DURATION}s |"
         echo ""
 
+        # Allowed
+        if [ -n "$KNOWN_ALLOWED" ]; then
+            echo "### Allowed"
+            echo ""
+            echo "| Domain | Status |"
+            echo "|--------|--------|"
+            echo "$KNOWN_ALLOWED" | while IFS= read -r d; do
+                [ -n "$d" ] && echo "| \`$d\` | :white_check_mark: allowed |"
+            done
+            echo ""
+        fi
+
         if [ "$MODE" = "restrict" ]; then
-            # Restrict: show allowed + blocked tables
-            if [ -n "$ALLOWED_DOMAINS" ]; then
-                echo "### Allowed"
-                echo ""
-                echo "| Domain | Status |"
-                echo "|--------|--------|"
-                echo "$ALLOWED_DOMAINS" | while IFS= read -r d; do
-                    [ -n "$d" ] && echo "| \`$d\` | :white_check_mark: allowed |"
-                done
-                echo ""
-            fi
+            # Blocked
             if [ "$TOTAL_BLOCKED" -gt 0 ]; then
                 echo "### Blocked"
                 echo ""
@@ -122,14 +177,17 @@ if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
                 echo ""
             fi
         else
-            # Monitor: show all observed domains
-            if [ -n "$ALL_DOMAINS" ]; then
-                echo "### Observed Domains"
+            # New / unknown
+            if [ "$NEW_DOMAIN_COUNT" -gt 0 ] || [ "$NEW_IP_COUNT" -gt 0 ]; then
+                echo "### New (not in egress rules)"
                 echo ""
-                echo "| Domain | Status |"
-                echo "|--------|--------|"
-                echo "$ALL_DOMAINS" | while IFS= read -r d; do
-                    [ -n "$d" ] && echo "| \`$d\` | :mag: observed |"
+                echo "| Target | Type | Status |"
+                echo "|--------|------|--------|"
+                [ -n "$NEW_DOMAINS" ] && echo "$NEW_DOMAINS" | while IFS= read -r d; do
+                    [ -n "$d" ] && echo "| \`$d\` | domain | :warning: new |"
+                done
+                [ -n "$NEW_IPS" ] && echo "$NEW_IPS" | while IFS= read -r ip; do
+                    [ -n "$ip" ] && echo "| \`$ip\` | IP | :warning: new |"
                 done
                 echo ""
             fi
@@ -137,14 +195,10 @@ if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
     } >> "$GITHUB_STEP_SUMMARY"
 fi
 
-# Exit code: only fail in restrict mode with blocked connections
+# Exit code
 if [ "$MODE" = "restrict" ] && [ "$TOTAL_BLOCKED" -gt 0 ]; then
     echo "DaPipe: $BLOCKED_DOMAIN_COUNT domain(s) and $BLOCKED_IP_COUNT IP(s) blocked."
     exit 1
 fi
 
-if [ "$MODE" = "monitor" ]; then
-    echo "DaPipe: $ALL_DOMAIN_COUNT domain(s) observed."
-else
-    echo "DaPipe: $ALLOWED_COUNT domain(s) allowed, 0 blocked."
-fi
+echo "DaPipe: $KNOWN_ALLOWED_COUNT allowed, $NEW_DOMAIN_COUNT new domain(s), $NEW_IP_COUNT new IP(s)."
