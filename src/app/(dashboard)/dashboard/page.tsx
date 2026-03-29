@@ -296,7 +296,7 @@ function RunDetail({ report: r, detail }: { report: Report; detail: any }) {
   )];
 
   // Merge all targets
-  const allTargets = [...domains, ...allDirectIps];
+  const allTargets: string[] = [...domains, ...allDirectIps];
 
   // Blocked targets (from blocked events only)
   const blockedSet = new Set(
