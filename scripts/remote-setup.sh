@@ -35,8 +35,7 @@ BLOCKED_DOMAINS=""
 BLOCKED_IPS=""
 
 if [ -n "$POLICY" ]; then
-    SAAS_MODE=$(echo "$POLICY" | sed -n 's/.*"mode":"\([^"]*\)".*/\1/p')
-    [ -n "$SAAS_MODE" ] && [ "$MODE" = "monitor" ] && MODE="$SAAS_MODE"
+    # Mode is always set by the customer via DAPIPE_MODE — SaaS policy does not override it
     ALLOWED_DOMAINS=$(echo "$POLICY" | sed -n 's/.*"allowed_domains":\[\([^]]*\)\].*/\1/p' | tr -d '"' | tr ',' '\n' | sed '/^$/d' | paste -sd ',' - || true)
     BLOCKED_DOMAINS=$(echo "$POLICY" | sed -n 's/.*"blocked_domains":\[\([^]]*\)\].*/\1/p' | tr -d '"' | tr ',' '\n' | sed '/^$/d' | paste -sd ',' - || true)
     BLOCKED_IPS=$(echo "$POLICY" | sed -n 's/.*"blocked_ips":\[\([^]]*\)\].*/\1/p' | tr -d '"' | tr ',' '\n' | sed '/^$/d' | paste -sd ',' - || true)

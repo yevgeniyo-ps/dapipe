@@ -67,15 +67,10 @@ if [ -n "${DAPIPE_API_KEY:-}" ]; then
         "$API_URL/api/v1/policy?repo=$REPO" 2>/dev/null || true)
 
     if [ -n "$SAAS_RESPONSE" ]; then
-        SAAS_MODE=$(echo "$SAAS_RESPONSE" | sed -n 's/.*"mode":"\([^"]*\)".*/\1/p')
+        # Mode is always set by the customer — SaaS policy does not override it
         SAAS_ALLOWED=$(echo "$SAAS_RESPONSE" | sed -n 's/.*"allowed_domains":\[\([^]]*\)\].*/\1/p' | tr -d '"' | tr ',' '\n' | sed '/^$/d' | paste -sd ',' - || true)
         SAAS_BLOCKED_DOMAINS=$(echo "$SAAS_RESPONSE" | sed -n 's/.*"blocked_domains":\[\([^]]*\)\].*/\1/p' | tr -d '"' | tr ',' '\n' | sed '/^$/d' | paste -sd ',' - || true)
         SAAS_BLOCKED_IPS=$(echo "$SAAS_RESPONSE" | sed -n 's/.*"blocked_ips":\[\([^]]*\)\].*/\1/p' | tr -d '"' | tr ',' '\n' | sed '/^$/d' | paste -sd ',' - || true)
-
-        # Local mode takes precedence over SaaS
-        if [ -n "$SAAS_MODE" ] && [ "$MODE" = "monitor" ]; then
-            MODE="$SAAS_MODE"
-        fi
         # Merge SaaS blocked domains/IPs
         if [ -n "$SAAS_BLOCKED_DOMAINS" ]; then
             BLOCKED_DOMAINS="${BLOCKED_DOMAINS:+$BLOCKED_DOMAINS,}$SAAS_BLOCKED_DOMAINS"
