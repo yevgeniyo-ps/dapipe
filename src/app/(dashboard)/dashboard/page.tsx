@@ -197,6 +197,9 @@ export default function DashboardPage() {
                             <div className="flex-1" />
                             <span className="text-[11px] text-muted-foreground">{jobs.length} job{jobs.length !== 1 ? "s" : ""}</span>
                             {runBlocked > 0 && <Badge variant="destructive" className="text-[10px]">{runBlocked} blocked</Badge>}
+                            {runBlocked === 0 && jobs.some((j) => j.status === "warning") && (
+                              <Badge className="text-[10px] bg-amber-500/15 text-amber-400 border-amber-500/20">new endpoints</Badge>
+                            )}
                           </div>
 
                           {runOpen && jobs.map((r) => {
@@ -213,9 +216,13 @@ export default function DashboardPage() {
                                     {r.mode === "restrict" ? <Shield className="h-2.5 w-2.5 mr-0.5" /> : <Eye className="h-2.5 w-2.5 mr-0.5" />}
                                     {r.mode}
                                   </Badge>
-                                  <Badge variant={r.blocked_count > 0 ? "destructive" : "secondary"} className="text-[10px]">
-                                    {r.blocked_count > 0 ? `${r.blocked_count} blocked` : "clean"}
-                                  </Badge>
+                                  {r.blocked_count > 0 ? (
+                                    <Badge variant="destructive" className="text-[10px]">{r.blocked_count} blocked</Badge>
+                                  ) : r.status === "warning" ? (
+                                    <Badge className="text-[10px] bg-amber-500/15 text-amber-400 border-amber-500/20">new endpoints</Badge>
+                                  ) : (
+                                    <Badge variant="secondary" className="text-[10px]">clean</Badge>
+                                  )}
                                 </div>
 
                                 {isJobOpen && (
