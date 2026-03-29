@@ -70,6 +70,9 @@ if [ -n "${GITHUB_ENV:-}" ]; then
         [ -n "$ALLOWED_DOMAINS" ] && echo "DAPIPE_ALLOWED_DOMAINS=$ALLOWED_DOMAINS" >> "$GITHUB_ENV"
         [ -n "$BLOCKED_DOMAINS" ] && echo "DAPIPE_BLOCKED_DOMAINS=$BLOCKED_DOMAINS" >> "$GITHUB_ENV"
         [ -n "$BLOCKED_IPS" ] && echo "DAPIPE_BLOCKED_IPS=$BLOCKED_IPS" >> "$GITHUB_ENV"
+        # Pre-seed resolved_ips.txt with allowed IPs so the hook allows them in connect()
+        RESOLVED_FILE="$DAPIPE_LOG_DIR/resolved_ips.txt"
+        echo "$ALLOWED_DOMAINS" | tr ',' '\n' | grep -E '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$' >> "$RESOLVED_FILE" 2>/dev/null || true
     fi
 fi
 
