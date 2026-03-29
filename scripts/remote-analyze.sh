@@ -34,14 +34,17 @@ if [ -n "$POLICY" ]; then
     POLICY_BLOCKED_IPS=$(echo "$POLICY" | sed -n 's/.*"blocked_ips":\[\([^]]*\)\].*/\1/p' | tr -d '"' | tr ',' '\n' | sed '/^$/d' || true)
 fi
 
-# Unique observed domains and IPs
+# Unique observed domains
 ALL_DOMAINS=$(echo "$FILTERED" | sed -n 's/.*"domain":"\([^"]*\)".*/\1/p' | sort -u | grep -v '^$' || true)
-ALL_IPS=$(echo "$FILTERED" | sed -n 's/.*"ip":"\([^"]*\)".*/\1/p' | sort -u | grep -v '^$' || true)
 BLOCKED_DOMAINS=$(echo "$FILTERED" | grep '"blocked"' | sed -n 's/.*"domain":"\([^"]*\)".*/\1/p' | sort -u | grep -v '^$' || true)
 BLOCKED_IPS=$(echo "$FILTERED" | grep '"blocked"' | sed -n 's/.*"ip":"\([^"]*\)".*/\1/p' | sort -u | grep -v '^$' || true)
 
-# Categorize domains: known-allowed, known-blocked, new (unknown)
+# Direct IP connections only (where domain is empty — not resolved IPs of domains)
+DIRECT_IPS=$(echo "$FILTERED" | grep '"domain":""' | sed -n 's/.*"ip":"\([^"]*\)".*/\1/p' | sort -u | grep -v '^$' || true)
+
+# Categorize domains: known-allowed, would-be-blocked, new (unknown)
 KNOWN_ALLOWED=""
+WOULD_BLOCK=""
 NEW_DOMAINS=""
 NEW_IPS=""
 
@@ -51,32 +54,34 @@ if [ -n "$ALL_DOMAINS" ]; then
         if [ -n "$POLICY_ALLOWED" ] && echo "$POLICY_ALLOWED" | grep -qxF "$d"; then
             KNOWN_ALLOWED="${KNOWN_ALLOWED}${d}"$'\n'
         elif [ -n "$POLICY_BLOCKED" ] && echo "$POLICY_BLOCKED" | grep -qxF "$d"; then
-            : # already in blocked list
+            WOULD_BLOCK="${WOULD_BLOCK}${d}"$'\n'
         else
             NEW_DOMAINS="${NEW_DOMAINS}${d}"$'\n'
         fi
     done <<< "$ALL_DOMAINS"
 fi
 
-# IPs: check against blocked IPs policy
-if [ -n "$ALL_IPS" ]; then
+# Direct IPs: categorize
+if [ -n "$DIRECT_IPS" ]; then
     while IFS= read -r ip; do
         [ -z "$ip" ] && continue
         if [ -n "$POLICY_BLOCKED_IPS" ] && echo "$POLICY_BLOCKED_IPS" | grep -qxF "$ip"; then
-            : # already in blocked IPs
-        elif [ -n "$POLICY_ALLOWED" ]; then
-            # IP not in any list = new
+            WOULD_BLOCK="${WOULD_BLOCK}${ip}"$'\n'
+        else
             NEW_IPS="${NEW_IPS}${ip}"$'\n'
         fi
-    done <<< "$ALL_IPS"
+    done <<< "$DIRECT_IPS"
 fi
 
 KNOWN_ALLOWED=$(echo "$KNOWN_ALLOWED" | sed '/^$/d' || true)
+WOULD_BLOCK=$(echo "$WOULD_BLOCK" | sed '/^$/d' || true)
 NEW_DOMAINS=$(echo "$NEW_DOMAINS" | sed '/^$/d' || true)
 NEW_IPS=$(echo "$NEW_IPS" | sed '/^$/d' || true)
 
 KNOWN_ALLOWED_COUNT=0
 [ -n "$KNOWN_ALLOWED" ] && KNOWN_ALLOWED_COUNT=$(echo "$KNOWN_ALLOWED" | wc -l | tr -d ' ')
+WOULD_BLOCK_COUNT=0
+[ -n "$WOULD_BLOCK" ] && WOULD_BLOCK_COUNT=$(echo "$WOULD_BLOCK" | wc -l | tr -d ' ')
 NEW_DOMAIN_COUNT=0
 [ -n "$NEW_DOMAINS" ] && NEW_DOMAIN_COUNT=$(echo "$NEW_DOMAINS" | wc -l | tr -d ' ')
 NEW_IP_COUNT=0
@@ -143,8 +148,9 @@ if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
             echo "| Blocked domains | $BLOCKED_DOMAIN_COUNT |"
             echo "| Blocked IPs | $BLOCKED_IP_COUNT |"
         else
-            echo "| New observed domains | $NEW_DOMAIN_COUNT |"
-            echo "| New observed IPs | $NEW_IP_COUNT |"
+            [ "$WOULD_BLOCK_COUNT" -gt 0 ] && echo "| Would be blocked in restrict | $WOULD_BLOCK_COUNT |"
+            [ "$NEW_DOMAIN_COUNT" -gt 0 ] && echo "| New observed domains | $NEW_DOMAIN_COUNT |"
+            [ "$NEW_IP_COUNT" -gt 0 ] && echo "| New observed IPs | $NEW_IP_COUNT |"
         fi
         [ -n "$DURATION" ] && echo "| Pipeline duration | ${DURATION}s |"
         echo ""
@@ -177,6 +183,17 @@ if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
                 echo ""
             fi
         else
+            # Would be blocked in restrict mode
+            if [ "$WOULD_BLOCK_COUNT" -gt 0 ]; then
+                echo "### Would be blocked in restrict mode"
+                echo ""
+                echo "| Target | Status |"
+                echo "|--------|--------|"
+                echo "$WOULD_BLOCK" | while IFS= read -r t; do
+                    [ -n "$t" ] && echo "| \`$t\` | :no_entry: would block |"
+                done
+                echo ""
+            fi
             # New / unknown
             if [ "$NEW_DOMAIN_COUNT" -gt 0 ] || [ "$NEW_IP_COUNT" -gt 0 ]; then
                 echo "### New (not in egress rules)"
