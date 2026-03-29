@@ -36,10 +36,7 @@ jobs:
       - name: Get version from release tag
         id: version
         run: |
-          # Strip leading 'v' from tag name (v0.3.0 -> 0.3.0)
-          VERSION="${GITHUB_REF_NAME#v}"
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          echo "Version: $VERSION"
+          echo "version=$GITHUB_REF_NAME" >> "$GITHUB_OUTPUT"
 
       - name: Upload to Supabase Storage
         env:
