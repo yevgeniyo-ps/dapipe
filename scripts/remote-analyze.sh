@@ -28,18 +28,46 @@ if [ -n "$POLICY" ]; then
 fi
 
 # ── Extract targets from log ────────────────────────────────────────
-# Primary source: dns + blocked events from getaddrinfo (what processes tried to reach)
-# These never contain resolved IPs — only actual targets
-DNS_TARGETS=$(grep -E '"event":"(dns|blocked)"' "$LOG_FILE" \
+# Primary: dns + blocked events (what processes tried to reach)
+# From domain field (getaddrinfo targets)
+DNS_DOMAINS=$(grep -E '"event":"(dns|blocked)"' "$LOG_FILE" \
     | sed -n 's/.*"domain":"\([^"]*\)".*/\1/p' \
     | grep -v "^$DAPIPE_HOST$" \
     | sort -u | grep -v '^$' || true)
 
-# Blocked events (restrict mode)
+# From connect blocked events where domain is an IP or empty (direct IP connections)
+BLOCKED_CONNECT_IPS=$(grep '"event":"blocked"' "$LOG_FILE" \
+    | sed -n 's/.*"ip":"\([^"]*\)".*/\1/p' \
+    | sort -u | grep -v '^$' || true)
+
+# IPs resolved from real domains (to exclude from direct IPs)
+RESOLVED_IPS=$(grep -E '"event":"connect".*"domain":"[a-zA-Z]' "$LOG_FILE" \
+    | sed -n 's/.*"ip":"\([^"]*\)".*/\1/p' \
+    | sort -u | grep -v '^$' || true)
+
+# Direct blocked IPs = blocked connect IPs minus resolved IPs
+DIRECT_BLOCKED_IPS=""
+if [ -n "$BLOCKED_CONNECT_IPS" ]; then
+    while IFS= read -r ip; do
+        [ -z "$ip" ] && continue
+        if [ -n "$RESOLVED_IPS" ] && echo "$RESOLVED_IPS" | grep -qxF "$ip"; then
+            continue
+        fi
+        DIRECT_BLOCKED_IPS="${DIRECT_BLOCKED_IPS}${ip}"$'\n'
+    done <<< "$BLOCKED_CONNECT_IPS"
+fi
+DIRECT_BLOCKED_IPS=$(echo "$DIRECT_BLOCKED_IPS" | sed '/^$/d' || true)
+
+# Merge all targets
+DNS_TARGETS=$(printf '%s\n%s' "$DNS_DOMAINS" "$DIRECT_BLOCKED_IPS" | sort -u | grep -v '^$' || true)
+
+# All blocked targets (from domain field)
 BLOCKED_TARGETS=$(grep '"event":"blocked"' "$LOG_FILE" \
     | sed -n 's/.*"domain":"\([^"]*\)".*/\1/p' \
     | grep -v "^$DAPIPE_HOST$" \
     | sort -u | grep -v '^$' || true)
+# Add direct blocked IPs
+BLOCKED_TARGETS=$(printf '%s\n%s' "$BLOCKED_TARGETS" "$DIRECT_BLOCKED_IPS" | sort -u | grep -v '^$' || true)
 
 # ── Categorize ──────────────────────────────────────────────────────
 ALLOWED=""
