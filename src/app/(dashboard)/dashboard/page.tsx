@@ -192,10 +192,16 @@ function ReportRow({ report: r, isExpanded, isLoading, detail, onToggle }: {
           }
         </td>
         <td className="px-4 py-3">
-          <span className="text-[13px] font-medium block">{r.repo_full_name}</span>
+          <div className="flex items-center gap-1.5 text-[12px] text-muted-foreground mb-0.5">
+            <span>{r.repo_full_name}</span>
+            {r.workflow_name && (
+              <>
+                <span className="text-[#48484a]">/</span>
+                <span className="text-secondary-foreground">{r.workflow_name}</span>
+              </>
+            )}
+          </div>
           <span className="text-[11px] text-muted-foreground">
-            {r.workflow_name || `Run #${r.run_id}`}
-            <span className="mx-1">&middot;</span>
             {timeAgo(r.created_at)}
           </span>
         </td>
