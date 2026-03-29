@@ -88,7 +88,7 @@ export default function EndpointsPage() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-[20px] font-semibold">Network Rules</h1>
+      <h1 className="text-[20px] font-semibold">Egress Rules</h1>
 
       {error && (
         <div className="rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-3 text-[13px] text-destructive">

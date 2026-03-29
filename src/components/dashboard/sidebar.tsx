@@ -28,7 +28,7 @@ import { useSidebar } from "@/components/sidebar-context";
 const navigation = [
   { name: "Overview", href: "/dashboard", icon: LayoutDashboard },
   { name: "Repos", href: "/dashboard/repos", icon: GitFork },
-  { name: "Network Rules", href: "/dashboard/policies", icon: Shield },
+  { name: "Egress Rules", href: "/dashboard/policies", icon: Shield },
   { name: "Reports", href: "/dashboard/reports", icon: FileBarChart },
   { name: "Deploy", href: "/dashboard/deploy", icon: Rocket },
 ];
