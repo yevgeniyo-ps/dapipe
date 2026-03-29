@@ -8,10 +8,25 @@ import { Badge } from "@/components/ui/badge";
 import {
   GitFork, ShieldCheck, FileBarChart, AlertTriangle, Activity,
   Eye, Shield, Loader2, ChevronDown, ChevronRight, ExternalLink,
-  Check, Ban, CircleAlert,
+  Check, Ban,
 } from "lucide-react";
 
 type Filter = "all" | "clean" | "blocked" | "monitor" | "restrict";
+
+interface Report {
+  id: string;
+  repo_full_name: string;
+  workflow_name: string;
+  run_id: string;
+  run_url: string;
+  branch: string;
+  commit_sha: string;
+  mode: string;
+  connection_count: number;
+  blocked_count: number;
+  status: string;
+  created_at: string;
+}
 
 export default function DashboardPage() {
   const orgId = useOrgId();
@@ -23,12 +38,14 @@ export default function DashboardPage() {
     cleanCount: number;
     monitorCount: number;
     restrictCount: number;
-    recentReports: any[];
+    recentReports: Report[];
   } | null>(null);
   const [filter, setFilter] = useState<Filter>("all");
-  const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [expandedData, setExpandedData] = useState<any>(null);
-  const [expandLoading, setExpandLoading] = useState(false);
+  const [expandedRepos, setExpandedRepos] = useState<Set<string>>(new Set());
+  const [expandedWorkflows, setExpandedWorkflows] = useState<Set<string>>(new Set());
+  const [expandedRun, setExpandedRun] = useState<string | null>(null);
+  const [runDetail, setRunDetail] = useState<any>(null);
+  const [runLoading, setRunLoading] = useState(false);
 
   const load = useCallback(async () => {
     if (!orgId) return;
@@ -42,19 +59,34 @@ export default function DashboardPage() {
   useEffect(() => { load(); }, [load]);
   useInterval(load, 10000);
 
-  const toggleExpand = async (id: string) => {
-    if (expandedId === id) {
-      setExpandedId(null);
-      setExpandedData(null);
+  const toggleRepo = (repo: string) => {
+    setExpandedRepos((prev) => {
+      const next = new Set(prev);
+      next.has(repo) ? next.delete(repo) : next.add(repo);
+      return next;
+    });
+  };
+
+  const toggleWorkflow = (key: string) => {
+    setExpandedWorkflows((prev) => {
+      const next = new Set(prev);
+      next.has(key) ? next.delete(key) : next.add(key);
+      return next;
+    });
+  };
+
+  const toggleRun = async (id: string) => {
+    if (expandedRun === id) {
+      setExpandedRun(null);
+      setRunDetail(null);
       return;
     }
-    setExpandedId(id);
-    setExpandLoading(true);
+    setExpandedRun(id);
+    setRunLoading(true);
     try {
-      const detail = await getReportDetail(id);
-      setExpandedData(detail);
+      setRunDetail(await getReportDetail(id));
     } finally {
-      setExpandLoading(false);
+      setRunLoading(false);
     }
   };
 
@@ -63,13 +95,23 @@ export default function DashboardPage() {
 
   const blockRate = data.reportCount > 0 ? Math.round((data.blockedCount / data.reportCount) * 100) : 0;
 
-  const filtered = (data.recentReports || []).filter((r: any) => {
+  const filtered = (data.recentReports || []).filter((r) => {
     if (filter === "clean") return r.blocked_count === 0;
     if (filter === "blocked") return r.blocked_count > 0;
     if (filter === "monitor") return r.mode === "monitor";
     if (filter === "restrict") return r.mode === "restrict";
     return true;
   });
+
+  // Group: repo → workflow → runs
+  const grouped: Record<string, Record<string, Report[]>> = {};
+  for (const r of filtered) {
+    const repo = r.repo_full_name;
+    const wf = r.workflow_name || "default";
+    if (!grouped[repo]) grouped[repo] = {};
+    if (!grouped[repo][wf]) grouped[repo][wf] = [];
+    grouped[repo][wf].push(r);
+  }
 
   const filters: { key: Filter; label: string; count: number }[] = [
     { key: "all", label: "All", count: data.reportCount },
@@ -119,56 +161,122 @@ export default function DashboardPage() {
         ))}
       </div>
 
-      <div className="rounded-2xl border overflow-hidden">
-        {filtered.length === 0 ? (
+      {/* Grouped tree */}
+      <div className="rounded-2xl border overflow-hidden divide-y">
+        {Object.keys(grouped).length === 0 ? (
           <p className="text-[13px] text-muted-foreground py-12 text-center">No reports match this filter.</p>
         ) : (
-          <table className="w-full border-collapse">
-            <thead>
-              <tr className="border-b">
-                <th className="px-4 py-3 w-8"></th>
-                <th className="px-4 py-3 text-left text-[11px] font-semibold text-muted-foreground uppercase tracking-[0.5px]">Pipeline</th>
-                <th className="px-4 py-3 text-left text-[11px] font-semibold text-muted-foreground uppercase tracking-[0.5px]">Branch</th>
-                <th className="px-4 py-3 text-center text-[11px] font-semibold text-muted-foreground uppercase tracking-[0.5px]">Mode</th>
-                <th className="px-4 py-3 text-center text-[11px] font-semibold text-muted-foreground uppercase tracking-[0.5px]">Blocked</th>
-                <th className="px-4 py-3 text-right text-[11px] font-semibold text-muted-foreground uppercase tracking-[0.5px]">Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map((r: any) => {
-                const isExpanded = expandedId === r.id;
-                return (
-                  <ReportRow
-                    key={r.id}
-                    report={r}
-                    isExpanded={isExpanded}
-                    isLoading={isExpanded && expandLoading}
-                    detail={isExpanded ? expandedData : null}
-                    onToggle={() => toggleExpand(r.id)}
-                  />
-                );
-              })}
-            </tbody>
-          </table>
+          Object.entries(grouped).map(([repo, workflows]) => {
+            const repoExpanded = expandedRepos.has(repo);
+            const repoRuns = Object.values(workflows).flat();
+            const repoBlocked = repoRuns.filter((r) => r.blocked_count > 0).length;
+
+            return (
+              <div key={repo}>
+                {/* Repo row */}
+                <div
+                  className="flex items-center gap-3 px-4 py-3 hover:bg-accent cursor-pointer"
+                  onClick={() => toggleRepo(repo)}
+                >
+                  {repoExpanded
+                    ? <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />
+                    : <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
+                  }
+                  <GitFork className="h-4 w-4 text-muted-foreground shrink-0" />
+                  <span className="text-[13px] font-semibold flex-1">{repo}</span>
+                  <span className="text-[12px] text-muted-foreground">{repoRuns.length} run{repoRuns.length !== 1 ? "s" : ""}</span>
+                  {repoBlocked > 0 && (
+                    <Badge variant="destructive" className="text-[10px]">{repoBlocked} blocked</Badge>
+                  )}
+                </div>
+
+                {/* Workflows */}
+                {repoExpanded && Object.entries(workflows).map(([wf, runs]) => {
+                  const wfKey = `${repo}/${wf}`;
+                  const wfExpanded = expandedWorkflows.has(wfKey);
+                  const wfBlocked = runs.filter((r) => r.blocked_count > 0).length;
+
+                  return (
+                    <div key={wfKey}>
+                      {/* Workflow row */}
+                      <div
+                        className="flex items-center gap-3 pl-10 pr-4 py-2.5 hover:bg-accent cursor-pointer border-t border-border/50"
+                        onClick={() => toggleWorkflow(wfKey)}
+                      >
+                        {wfExpanded
+                          ? <ChevronDown className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                          : <ChevronRight className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                        }
+                        <FileBarChart className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                        <span className="text-[13px] font-medium flex-1">{wf}</span>
+                        <span className="text-[11px] text-muted-foreground">{runs.length} run{runs.length !== 1 ? "s" : ""}</span>
+                        {wfBlocked > 0 && (
+                          <Badge variant="destructive" className="text-[10px]">{wfBlocked}</Badge>
+                        )}
+                      </div>
+
+                      {/* Runs */}
+                      {wfExpanded && runs.map((r) => {
+                        const isRunExpanded = expandedRun === r.id;
+                        return (
+                          <div key={r.id}>
+                            <div
+                              className="flex items-center gap-3 pl-16 pr-4 py-2 hover:bg-accent cursor-pointer border-t border-border/30"
+                              onClick={() => toggleRun(r.id)}
+                            >
+                              {isRunExpanded
+                                ? <ChevronDown className="h-3 w-3 text-muted-foreground shrink-0" />
+                                : <ChevronRight className="h-3 w-3 text-muted-foreground shrink-0" />
+                              }
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2">
+                                  <span className="text-[12px] font-mono text-secondary-foreground">{r.branch}</span>
+                                  <span className="text-[11px] font-mono text-muted-foreground">{r.commit_sha?.slice(0, 7)}</span>
+                                  <span className="text-[11px] text-muted-foreground">{timeAgo(r.created_at)}</span>
+                                </div>
+                              </div>
+                              <Badge variant="secondary" className={`text-[10px] ${r.mode === "restrict" ? "bg-amber-500/15 text-amber-400" : ""}`}>
+                                {r.mode === "restrict" ? <Shield className="h-2.5 w-2.5 mr-0.5" /> : <Eye className="h-2.5 w-2.5 mr-0.5" />}
+                                {r.mode}
+                              </Badge>
+                              {r.blocked_count > 0 && (
+                                <span className="text-[12px] font-medium text-destructive tabular-nums">{r.blocked_count} blocked</span>
+                              )}
+                              <Badge variant={r.blocked_count > 0 ? "destructive" : "secondary"} className="text-[10px]">
+                                {r.blocked_count > 0 ? "blocked" : "clean"}
+                              </Badge>
+                            </div>
+
+                            {/* Expanded run detail */}
+                            {isRunExpanded && (
+                              <div className="pl-20 pr-4 py-3 bg-accent/20 border-t border-border/30">
+                                {runLoading ? (
+                                  <div className="flex items-center justify-center py-4">
+                                    <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                                  </div>
+                                ) : (
+                                  <RunDetail report={r} detail={runDetail} />
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })
         )}
       </div>
     </div>
   );
 }
 
-function ReportRow({ report: r, isExpanded, isLoading, detail, onToggle }: {
-  report: any;
-  isExpanded: boolean;
-  isLoading: boolean;
-  detail: any;
-  onToggle: () => void;
-}) {
-  // Categorize connections
+function RunDetail({ report: r, detail }: { report: Report; detail: any }) {
   const conns = detail?.connections || [];
-  const allowed = conns.filter((c: any) => c.event === "dns" || (c.event === "connect" && c.domain));
-  const blocked = conns.filter((c: any) => c.event === "blocked");
 
-  // Unique targets
   const uniqueAllowed = [...new Set(
     conns.filter((c: any) => c.event !== "blocked")
       .map((c: any) => c.domain)
@@ -176,119 +284,58 @@ function ReportRow({ report: r, isExpanded, isLoading, detail, onToggle }: {
   )] as string[];
 
   const uniqueBlocked = [...new Set(
-    blocked.map((c: any) => c.domain || c.ip).filter(Boolean)
+    conns.filter((c: any) => c.event === "blocked")
+      .map((c: any) => c.domain || c.ip)
+      .filter(Boolean)
   )] as string[];
 
   return (
-    <>
-      <tr
-        className="border-b last:border-0 hover:bg-accent cursor-pointer transition-colors"
-        onClick={onToggle}
-      >
-        <td className="px-4 py-3">
-          {isExpanded
-            ? <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
-            : <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
-          }
-        </td>
-        <td className="px-4 py-3">
-          <div className="flex items-center gap-1.5 text-[12px] text-muted-foreground mb-0.5">
-            <span>{r.repo_full_name}</span>
-            {r.workflow_name && (
-              <>
-                <span className="text-[#48484a]">/</span>
-                <span className="text-secondary-foreground">{r.workflow_name}</span>
-              </>
-            )}
-          </div>
-          <span className="text-[11px] text-muted-foreground">
-            {timeAgo(r.created_at)}
-          </span>
-        </td>
-        <td className="px-4 py-3">
-          <span className="text-[12px] font-mono text-secondary-foreground">{r.branch}</span>
-          <span className="text-[11px] font-mono text-muted-foreground ml-1">{r.commit_sha?.slice(0, 7)}</span>
-        </td>
-        <td className="px-4 py-3 text-center">
-          <Badge variant="secondary" className={r.mode === "restrict" ? "bg-amber-500/15 text-amber-400" : ""}>
-            {r.mode === "restrict" ? <Shield className="h-3 w-3 mr-1" /> : <Eye className="h-3 w-3 mr-1" />}
-            {r.mode}
-          </Badge>
-        </td>
-        <td className="px-4 py-3 text-center text-[13px] tabular-nums">
-          {r.blocked_count > 0
-            ? <span className="text-destructive font-medium">{r.blocked_count}</span>
-            : <span className="text-muted-foreground">0</span>
-          }
-        </td>
-        <td className="px-4 py-3 text-right">
-          <Badge variant={r.blocked_count > 0 ? "destructive" : "secondary"}>
-            {r.blocked_count > 0 ? "blocked" : "clean"}
-          </Badge>
-        </td>
-      </tr>
-      {isExpanded && (
-        <tr className="border-b last:border-0">
-          <td colSpan={6} className="px-8 py-4 bg-accent/20">
-            {isLoading ? (
-              <div className="flex items-center justify-center py-6">
-                <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-              </div>
-            ) : (
-              <div className="space-y-4">
-                {/* Meta */}
-                <div className="flex items-center gap-4 text-[12px] text-muted-foreground">
-                  <span>Run #{r.run_id}</span>
-                  <span>{r.commit_sha?.slice(0, 7)}</span>
-                  <span>{new Date(r.created_at).toLocaleString()}</span>
-                  {r.run_url && (
-                    <a href={r.run_url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 hover:text-foreground">
-                      GitHub <ExternalLink className="h-3 w-3" />
-                    </a>
-                  )}
-                </div>
+    <div className="space-y-3">
+      <div className="flex items-center gap-4 text-[11px] text-muted-foreground">
+        <span>Run #{r.run_id}</span>
+        <span>{new Date(r.created_at).toLocaleString()}</span>
+        {r.run_url && (
+          <a href={r.run_url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 hover:text-foreground">
+            GitHub <ExternalLink className="h-3 w-3" />
+          </a>
+        )}
+      </div>
 
-                {/* Targets table */}
-                {(uniqueAllowed.length > 0 || uniqueBlocked.length > 0) ? (
-                  <table className="w-full border-collapse rounded-lg border overflow-hidden">
-                    <thead>
-                      <tr className="border-b bg-muted/30">
-                        <th className="px-3 py-2 text-left text-[11px] font-semibold text-muted-foreground uppercase tracking-[0.5px]">Target</th>
-                        <th className="px-3 py-2 text-left text-[11px] font-semibold text-muted-foreground uppercase tracking-[0.5px]">Status</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {uniqueAllowed.map((t) => (
-                        <tr key={`a-${t}`} className="border-b last:border-0">
-                          <td className="px-3 py-2 text-[12px] font-mono">{t}</td>
-                          <td className="px-3 py-2">
-                            <span className="inline-flex items-center gap-1.5 text-[12px] text-muted-foreground">
-                              <Check className="h-3 w-3" /> allowed
-                            </span>
-                          </td>
-                        </tr>
-                      ))}
-                      {uniqueBlocked.map((t) => (
-                        <tr key={`b-${t}`} className="border-b last:border-0">
-                          <td className="px-3 py-2 text-[12px] font-mono">{t}</td>
-                          <td className="px-3 py-2">
-                            <span className="inline-flex items-center gap-1.5 text-[12px] text-destructive">
-                              <Ban className="h-3 w-3" /> blocked
-                            </span>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                ) : (
-                  <p className="text-[12px] text-muted-foreground">No connection details available.</p>
-                )}
-              </div>
-            )}
-          </td>
-        </tr>
+      {(uniqueAllowed.length > 0 || uniqueBlocked.length > 0) ? (
+        <table className="w-full border-collapse rounded-lg border overflow-hidden">
+          <thead>
+            <tr className="border-b bg-muted/30">
+              <th className="px-3 py-2 text-left text-[11px] font-semibold text-muted-foreground uppercase tracking-[0.5px]">Target</th>
+              <th className="px-3 py-2 text-left text-[11px] font-semibold text-muted-foreground uppercase tracking-[0.5px]">Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {uniqueAllowed.map((t) => (
+              <tr key={`a-${t}`} className="border-b last:border-0">
+                <td className="px-3 py-2 text-[12px] font-mono">{t}</td>
+                <td className="px-3 py-2">
+                  <span className="inline-flex items-center gap-1.5 text-[12px] text-muted-foreground">
+                    <Check className="h-3 w-3" /> allowed
+                  </span>
+                </td>
+              </tr>
+            ))}
+            {uniqueBlocked.map((t) => (
+              <tr key={`b-${t}`} className="border-b last:border-0">
+                <td className="px-3 py-2 text-[12px] font-mono">{t}</td>
+                <td className="px-3 py-2">
+                  <span className="inline-flex items-center gap-1.5 text-[12px] text-destructive">
+                    <Ban className="h-3 w-3" /> blocked
+                  </span>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      ) : (
+        <p className="text-[12px] text-muted-foreground">No connection details available.</p>
       )}
-    </>
+    </div>
   );
 }
 
