@@ -325,6 +325,10 @@ function RunDetail({ report: r, detail }: { report: Report; detail: any }) {
     }
   }
 
+  // Sort: allowed first, then blocked existing, blocked new, new
+  const order: Record<Category, number> = { allowed: 0, blocked_existing: 1, blocked_new: 2, new: 3 };
+  targets.sort((a, b) => order[a.category] - order[b.category]);
+
   const handleAllow = async (target: string) => {
     if (!orgId) return;
     await addToAllowed(orgId, target);
