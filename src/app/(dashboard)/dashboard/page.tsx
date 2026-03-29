@@ -266,34 +266,48 @@ function RunDetail({ report: r, detail }: { report: Report; detail: any }) {
   const allBlocked = new Set([...(base.blocked || []), ...(policy?.blocked_domains || []), ...(policy?.blocked_ips || [])]);
   const isBase = (t: string) => base.allowed.includes(t) || base.blocked.includes(t);
 
-  // Unique targets from connections
-  // Domains from non-blocked events
-  const allowedDomains = conns
-    .filter((c: any) => c.event !== "blocked" && c.domain && !c.domain.match(/^app\.dapipe/))
-    .map((c: any) => c.domain);
-  // IPs from non-blocked events where domain is empty (direct IP connections)
-  const allowedIps = conns
-    .filter((c: any) => c.event !== "blocked" && (!c.domain || c.domain === "") && c.ip)
-    .map((c: any) => c.ip)
-    .filter((ip: string) => allAllowed.has(ip));  // only show if explicitly allowed
-  const allowedTargets = [...new Set([...allowedDomains, ...allowedIps])] as string[];
+  // IPs resolved from real domains (noise to exclude)
+  const resolvedIps = new Set(
+    conns.filter((c: any) => c.domain && /^[a-zA-Z]/.test(c.domain) && c.ip)
+      .map((c: any) => c.ip)
+  );
 
-  // Blocked: domain or IP from blocked events
-  const blockedTargets = [...new Set(
-    conns.filter((c: any) => c.event === "blocked").map((c: any) => c.domain || c.ip).filter(Boolean)
+  // Domains from dns/blocked events + non-blocked connect events with domain
+  const domains = [...new Set(
+    conns.filter((c: any) => c.domain && !c.domain.match(/^app\.dapipe/))
+      .map((c: any) => c.domain)
   )] as string[];
+
+  // Direct IPs: from connect/blocked events where domain is empty, minus resolved IPs
+  const directIps = [...new Set(
+    conns.filter((c: any) => (!c.domain || c.domain === "") && c.ip && !resolvedIps.has(c.ip))
+      .map((c: any) => c.ip)
+  )] as string[];
+
+  // Merge all targets
+  const allTargets = [...domains, ...directIps];
+
+  // Blocked targets (from blocked events only)
+  const blockedSet = new Set(
+    conns.filter((c: any) => c.event === "blocked").map((c: any) => c.domain || c.ip).filter(Boolean)
+  );
 
   // Categorize
   type Category = "allowed" | "blocked_existing" | "blocked_new" | "new";
   const targets: { target: string; category: Category }[] = [];
 
-  for (const t of allowedTargets) {
-    if (allAllowed.has(t)) targets.push({ target: t, category: "allowed" });
-    else targets.push({ target: t, category: "new" });
-  }
-  for (const t of blockedTargets) {
-    if (allBlocked.has(t)) targets.push({ target: t, category: "blocked_existing" });
-    else targets.push({ target: t, category: "blocked_new" });
+  for (const t of allTargets) {
+    const isBlocked = blockedSet.has(t);
+
+    if (allAllowed.has(t) && !isBlocked) {
+      targets.push({ target: t, category: "allowed" });
+    } else if (allBlocked.has(t)) {
+      targets.push({ target: t, category: "blocked_existing" });
+    } else if (isBlocked) {
+      targets.push({ target: t, category: "blocked_new" });
+    } else {
+      targets.push({ target: t, category: "new" });
+    }
   }
 
   const handleAllow = async (target: string) => {
