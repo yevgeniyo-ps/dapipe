@@ -277,10 +277,12 @@ function RunDetail({ report: r, detail }: { report: Report; detail: any }) {
   const allBlocked = new Set([...(base.blocked || []), ...(policy?.blocked_domains || []), ...(policy?.blocked_ips || [])]);
   const isBase = (t: string) => base.allowed.includes(t) || base.blocked.includes(t);
 
-  // IPs resolved from real domains (noise to exclude)
+  // IPs resolved from domains — use report's resolved_ips if available, fallback to connect heuristic
+  const reportResolvedIps = detail?.report?.resolved_ips || [];
   const resolvedIps = new Set(
-    conns.filter((c: any) => c.domain && /^[a-zA-Z]/.test(c.domain) && c.ip)
-      .map((c: any) => c.ip)
+    reportResolvedIps.length > 0
+      ? reportResolvedIps
+      : conns.filter((c: any) => c.domain && /^[a-zA-Z]/.test(c.domain) && c.ip).map((c: any) => c.ip)
   );
 
   // Domains from dns/blocked events + non-blocked connect events with domain

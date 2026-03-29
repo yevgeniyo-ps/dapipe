@@ -83,6 +83,7 @@ export async function POST(request: Request) {
       branch: body.branch || "",
       commit_sha: body.commit_sha || "",
       mode: body.mode || "monitor",
+      resolved_ips: (body as any).resolved_ips || [],
       connection_count: connections.length,
       blocked_count: blockedCount,
       status,

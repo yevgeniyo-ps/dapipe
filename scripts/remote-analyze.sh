@@ -128,7 +128,21 @@ while IFS= read -r line; do
 done < "$LOG_FILE"
 CONNECTIONS="$CONNECTIONS]"
 
-BODY="{\"repo\":\"${REPO}\",\"workflow_name\":\"${GITHUB_WORKFLOW:-}\",\"job_name\":\"${GITHUB_JOB:-}\",\"run_id\":\"${GITHUB_RUN_ID:-0}\",\"run_url\":\"${GITHUB_SERVER_URL:-https://github.com}/${REPO}/actions/runs/${GITHUB_RUN_ID:-0}\",\"branch\":\"${GITHUB_REF_NAME:-}\",\"commit_sha\":\"${GITHUB_SHA:-}\",\"mode\":\"${MODE}\",\"connections\":${CONNECTIONS}}"
+# Build resolved IPs JSON array from file
+RESOLVED_FILE="$DAPIPE_LOG_DIR/resolved_ips.txt"
+RESOLVED_JSON="[]"
+if [ -f "$RESOLVED_FILE" ]; then
+    RESOLVED_JSON="["
+    RFIRST=true
+    while IFS= read -r rip; do
+        [ -z "$rip" ] && continue
+        [ "$RFIRST" = true ] && RFIRST=false || RESOLVED_JSON="$RESOLVED_JSON,"
+        RESOLVED_JSON="$RESOLVED_JSON\"$rip\""
+    done < <(sort -u "$RESOLVED_FILE")
+    RESOLVED_JSON="$RESOLVED_JSON]"
+fi
+
+BODY="{\"repo\":\"${REPO}\",\"workflow_name\":\"${GITHUB_WORKFLOW:-}\",\"job_name\":\"${GITHUB_JOB:-}\",\"run_id\":\"${GITHUB_RUN_ID:-0}\",\"run_url\":\"${GITHUB_SERVER_URL:-https://github.com}/${REPO}/actions/runs/${GITHUB_RUN_ID:-0}\",\"branch\":\"${GITHUB_REF_NAME:-}\",\"commit_sha\":\"${GITHUB_SHA:-}\",\"mode\":\"${MODE}\",\"resolved_ips\":${RESOLVED_JSON},\"connections\":${CONNECTIONS}}"
 
 curl -sf --max-time 15 \
     -X POST \
