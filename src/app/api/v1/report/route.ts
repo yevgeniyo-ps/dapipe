@@ -113,5 +113,10 @@ export async function POST(request: Request) {
     await supabase.from("connections").insert(rows);
   }
 
-  return NextResponse.json({ id: report.id, status });
+  return NextResponse.json({
+    id: report.id,
+    status,
+    blocked_count: blockedCount,
+    connection_count: connections.length,
+  });
 }
