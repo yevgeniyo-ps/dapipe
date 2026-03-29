@@ -77,7 +77,7 @@ export function AdminSidebar({ user }: AdminSidebarProps) {
       </button>
 
       {/* Admin banner */}
-      <div className={cn("flex items-center justify-center border-b border-amber-500/20 bg-amber-500/10 transition-all duration-200", collapsed ? "py-2" : "py-1.5")}>
+      <div className={cn("flex items-center justify-center rounded-t-2xl border-b border-amber-500/20 bg-amber-500/10 transition-all duration-200", collapsed ? "py-2" : "py-1.5")}>
         {collapsed ? (
           <span className="text-[10px] font-semibold text-amber-400 uppercase">BO</span>
         ) : (
