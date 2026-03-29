@@ -39,13 +39,13 @@ ALL_DOMAINS=$(echo "$FILTERED" | sed -n 's/.*"domain":"\([^"]*\)".*/\1/p' | sort
 BLOCKED_DOMAINS=$(echo "$FILTERED" | grep '"blocked"' | sed -n 's/.*"domain":"\([^"]*\)".*/\1/p' | sort -u | grep -v '^$' || true)
 BLOCKED_IPS=$(echo "$FILTERED" | grep '"blocked"' | sed -n 's/.*"ip":"\([^"]*\)".*/\1/p' | sort -u | grep -v '^$' || true)
 
-# Skip resolved IPs entirely — only report domains in the summary
+# Direct IP connections (domain is empty — user curled an IP directly)
+DIRECT_IPS=$(echo "$FILTERED" | grep '"domain":""\|"domain": ""' | sed -n 's/.*"ip":"\([^"]*\)".*/\1/p' | sort -u | grep -v '^$' || true)
 
-# Categorize domains: known-allowed, would-be-blocked, new (unknown)
+# Categorize domains
 KNOWN_ALLOWED=""
 WOULD_BLOCK=""
 NEW_DOMAINS=""
-NEW_IPS=""
 
 if [ -n "$ALL_DOMAINS" ]; then
     while IFS= read -r d; do
@@ -58,6 +58,18 @@ if [ -n "$ALL_DOMAINS" ]; then
             NEW_DOMAINS="${NEW_DOMAINS}${d}"$'\n'
         fi
     done <<< "$ALL_DOMAINS"
+fi
+
+# Categorize direct IPs (only IPs accessed directly, not resolved from domains)
+if [ -n "$DIRECT_IPS" ]; then
+    while IFS= read -r ip; do
+        [ -z "$ip" ] && continue
+        if [ -n "$POLICY_BLOCKED_IPS" ] && echo "$POLICY_BLOCKED_IPS" | grep -qxF "$ip"; then
+            WOULD_BLOCK="${WOULD_BLOCK}${ip} (IP)"$'\n'
+        else
+            NEW_DOMAINS="${NEW_DOMAINS}${ip} (IP)"$'\n'
+        fi
+    done <<< "$DIRECT_IPS"
 fi
 
 KNOWN_ALLOWED=$(echo "$KNOWN_ALLOWED" | sed '/^$/d' || true)
