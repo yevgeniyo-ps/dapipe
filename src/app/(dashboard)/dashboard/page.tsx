@@ -267,9 +267,18 @@ function RunDetail({ report: r, detail }: { report: Report; detail: any }) {
   const isBase = (t: string) => base.allowed.includes(t) || base.blocked.includes(t);
 
   // Unique targets from connections
-  const allowedTargets = [...new Set(
-    conns.filter((c: any) => c.event !== "blocked").map((c: any) => c.domain).filter((d: string) => d && !d.match(/^app\.dapipe/))
-  )] as string[];
+  // Domains from non-blocked events
+  const allowedDomains = conns
+    .filter((c: any) => c.event !== "blocked" && c.domain && !c.domain.match(/^app\.dapipe/))
+    .map((c: any) => c.domain);
+  // IPs from non-blocked events where domain is empty (direct IP connections)
+  const allowedIps = conns
+    .filter((c: any) => c.event !== "blocked" && (!c.domain || c.domain === "") && c.ip)
+    .map((c: any) => c.ip)
+    .filter((ip: string) => allAllowed.has(ip));  // only show if explicitly allowed
+  const allowedTargets = [...new Set([...allowedDomains, ...allowedIps])] as string[];
+
+  // Blocked: domain or IP from blocked events
   const blockedTargets = [...new Set(
     conns.filter((c: any) => c.event === "blocked").map((c: any) => c.domain || c.ip).filter(Boolean)
   )] as string[];
