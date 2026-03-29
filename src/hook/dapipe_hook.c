@@ -164,7 +164,6 @@ static void emit_log(const char *event, const char *domain,
 }
 
 /* ── Hooked: getaddrinfo ─────────────────────────────────────────────── */
-__attribute__((visibility("default")))
 int getaddrinfo(const char *node, const char *service,
                 const struct addrinfo *hints, struct addrinfo **res) {
     resolve_symbols();
@@ -193,7 +192,6 @@ int getaddrinfo(const char *node, const char *service,
 }
 
 /* ── Hooked: connect ─────────────────────────────────────────────────── */
-__attribute__((visibility("default")))
 int connect(int sockfd, const struct sockaddr *addr, socklen_t addrlen) {
     resolve_symbols();
 

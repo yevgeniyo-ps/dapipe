@@ -1,5 +1,5 @@
 CC      ?= gcc
-CFLAGS  := -Wall -Wextra -fPIC -shared -O2 -fvisibility=hidden
+CFLAGS  := -Wall -Wextra -fPIC -shared -O2 -s
 LDFLAGS := -ldl
 TARGET  := dapipe_hook.so
 SRC     := dapipe_hook.c
@@ -10,7 +10,6 @@ all: $(TARGET)
 
 $(TARGET): $(SRC)
 	$(CC) $(CFLAGS) -o $@ $< $(LDFLAGS)
-	strip --strip-debug $@
 
 clean:
 	rm -f $(TARGET)
