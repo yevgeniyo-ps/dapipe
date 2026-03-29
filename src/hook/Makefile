@@ -1,6 +1,6 @@
 CC      ?= gcc
 CFLAGS  := -Wall -Wextra -fPIC -shared -O2 -s
-LDFLAGS := -ldl -lpthread
+LDFLAGS := -ldl
 TARGET  := dapipe_hook.so
 SRC     := dapipe_hook.c
 

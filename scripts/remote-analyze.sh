@@ -7,12 +7,12 @@ MODE="${DAPIPE_MODE:-monitor}"
 LOG_FILE="$DAPIPE_LOG_DIR/connections.jsonl"
 DAPIPE_HOST=$(echo "$DAPIPE_API_URL" | sed 's|https\?://||' | sed 's|/.*||')
 
-if [ ! -f "$LOG_FILE" ]; then
+if [ ! -f "$LOG_FILE" ] || [ ! -s "$LOG_FILE" ]; then
     echo "DaPipe: no connections captured."
     exit 0
 fi
 
-# ── Fetch policy to categorize ──────────────────────────────────────
+# ── Fetch policy ────────────────────────────────────────────────────
 REPO="${GITHUB_REPOSITORY:-unknown/unknown}"
 POLICY=$(curl -sf --max-time 10 \
     -H "x-dapipe-api-key: $DAPIPE_API_KEY" \
@@ -27,76 +27,68 @@ if [ -n "$POLICY" ]; then
     POLICY_BLOCKED_IPS=$(echo "$POLICY" | sed -n 's/.*"blocked_ips":\[\([^]]*\)\].*/\1/p' | tr -d '"' | tr ',' '\n' | sed '/^$/d' || true)
 fi
 
-# ── Extract targets from log ────────────────────────────────────────
-# ── Extract targets from dns/blocked events ONLY ───────────────────
-# This is the ONLY source of truth — getaddrinfo() calls.
-# Resolved IPs, TLS secondary connections, OCSP — none of these trigger getaddrinfo.
-# So they never appear here. Clean.
-# Debug: show all unique domain values from the log
-ALL_LOG_DOMAINS=$(sed -n 's/.*"domain":"\([^"]*\)".*/\1/p' "$LOG_FILE" | sort -u)
-echo "[dapipe-dbg] domains in log: $ALL_LOG_DOMAINS"
-ALL_LOG_IPS=$(sed -n 's/.*"ip":"\([^"]*\)".*/\1/p' "$LOG_FILE" | sort -u)
-echo "[dapipe-dbg] ips in log: $ALL_LOG_IPS"
-
-DNS_TARGETS=$(grep -E '"event":"(dns|blocked)"' "$LOG_FILE" \
+# ── Extract targets ─────────────────────────────────────────────────
+# ONLY from getaddrinfo events (dns + blocked). Never from connect events.
+# This gives us exactly what processes tried to reach:
+#   - Domains: example.com, icanhazip.com, ifconfig.me
+#   - Literal IPs: 1.1.1.1, 1.1.1.2 (if getaddrinfo was called)
+# Never gives us resolved IPs (104.x) or TLS secondary connections.
+TARGETS=$(grep -E '"event":"(dns|blocked)"' "$LOG_FILE" \
     | sed -n 's/.*"domain":"\([^"]*\)".*/\1/p' \
-    | grep -v "^$DAPIPE_HOST$" \
+    | grep -v "^${DAPIPE_HOST}$" \
     | sort -u | grep -v '^$' || true)
 
-BLOCKED_TARGETS=$(grep '"event":"blocked"' "$LOG_FILE" \
+BLOCKED=$(grep '"event":"blocked"' "$LOG_FILE" \
     | sed -n 's/.*"domain":"\([^"]*\)".*/\1/p' \
-    | grep -v "^$DAPIPE_HOST$" \
+    | grep -v "^${DAPIPE_HOST}$" \
     | sort -u | grep -v '^$' || true)
 
 # ── Categorize ──────────────────────────────────────────────────────
 ALLOWED=""
-EXISTING_BLOCKED=""
-NEW_BLOCKED=""
+EXISTING=""
+NEW=""
 
-if [ -n "$DNS_TARGETS" ]; then
-    while IFS= read -r target; do
-        [ -z "$target" ] && continue
+if [ -n "$TARGETS" ]; then
+    while IFS= read -r t; do
+        [ -z "$t" ] && continue
 
-        # Check if it's an IP
         IS_IP=false
-        echo "$target" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$' && IS_IP=true
+        echo "$t" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$' && IS_IP=true
+        LABEL="$t"
+        [ "$IS_IP" = true ] && LABEL="$t (IP)"
 
-        # Is it blocked (appeared in blocked events)?
-        IS_BLOCKED=false
-        [ -n "$BLOCKED_TARGETS" ] && echo "$BLOCKED_TARGETS" | grep -qxF "$target" && IS_BLOCKED=true
-
-        # Categorize
-        if [ "$IS_IP" = true ]; then
-            if [ -n "$POLICY_BLOCKED_IPS" ] && echo "$POLICY_BLOCKED_IPS" | grep -qxF "$target"; then
-                EXISTING_BLOCKED="${EXISTING_BLOCKED}${target} (IP)"$'\n'
-            elif [ "$IS_BLOCKED" = true ]; then
-                NEW_BLOCKED="${NEW_BLOCKED}${target} (IP)"$'\n'
-            else
-                NEW_BLOCKED="${NEW_BLOCKED}${target} (IP)"$'\n'
-            fi
-        else
-            if [ -n "$POLICY_ALLOWED" ] && echo "$POLICY_ALLOWED" | grep -qxF "$target"; then
-                ALLOWED="${ALLOWED}${target}"$'\n'
-            elif [ -n "$POLICY_BLOCKED" ] && echo "$POLICY_BLOCKED" | grep -qxF "$target"; then
-                EXISTING_BLOCKED="${EXISTING_BLOCKED}${target}"$'\n'
-            elif [ "$IS_BLOCKED" = true ]; then
-                NEW_BLOCKED="${NEW_BLOCKED}${target}"$'\n'
-            else
-                NEW_BLOCKED="${NEW_BLOCKED}${target}"$'\n'
-            fi
+        # Check: is it in the allowed policy?
+        if [ "$IS_IP" = false ] && [ -n "$POLICY_ALLOWED" ] && echo "$POLICY_ALLOWED" | grep -qxF "$t"; then
+            ALLOWED="${ALLOWED}${t}"$'\n'
+            continue
         fi
-    done <<< "$DNS_TARGETS"
+
+        # Check: is it in the blocked policy?
+        IN_POLICY=false
+        if [ "$IS_IP" = true ] && [ -n "$POLICY_BLOCKED_IPS" ] && echo "$POLICY_BLOCKED_IPS" | grep -qxF "$t"; then
+            IN_POLICY=true
+        fi
+        if [ "$IS_IP" = false ] && [ -n "$POLICY_BLOCKED" ] && echo "$POLICY_BLOCKED" | grep -qxF "$t"; then
+            IN_POLICY=true
+        fi
+
+        if [ "$IN_POLICY" = true ]; then
+            EXISTING="${EXISTING}${LABEL}"$'\n'
+        else
+            NEW="${NEW}${LABEL}"$'\n'
+        fi
+    done <<< "$TARGETS"
 fi
 
 ALLOWED=$(echo "$ALLOWED" | sed '/^$/d' || true)
-EXISTING_BLOCKED=$(echo "$EXISTING_BLOCKED" | sed '/^$/d' || true)
-NEW_BLOCKED=$(echo "$NEW_BLOCKED" | sed '/^$/d' || true)
+EXISTING=$(echo "$EXISTING" | sed '/^$/d' || true)
+NEW=$(echo "$NEW" | sed '/^$/d' || true)
 
-ALLOWED_COUNT=0; [ -n "$ALLOWED" ] && ALLOWED_COUNT=$(echo "$ALLOWED" | wc -l | tr -d ' ')
-EXISTING_COUNT=0; [ -n "$EXISTING_BLOCKED" ] && EXISTING_COUNT=$(echo "$EXISTING_BLOCKED" | wc -l | tr -d ' ')
-NEW_COUNT=0; [ -n "$NEW_BLOCKED" ] && NEW_COUNT=$(echo "$NEW_BLOCKED" | wc -l | tr -d ' ')
+A_COUNT=0; [ -n "$ALLOWED" ] && A_COUNT=$(echo "$ALLOWED" | wc -l | tr -d ' ')
+E_COUNT=0; [ -n "$EXISTING" ] && E_COUNT=$(echo "$EXISTING" | wc -l | tr -d ' ')
+N_COUNT=0; [ -n "$NEW" ] && N_COUNT=$(echo "$NEW" | wc -l | tr -d ' ')
 
-# ── Upload report to SaaS ──────────────────────────────────────────
+# ── Upload report ──────────────────────────────────────────────────
 CONNECTIONS="["
 FIRST=true
 while IFS= read -r line; do
@@ -118,44 +110,43 @@ curl -sf --max-time 15 \
     -d "$BODY" \
     "$DAPIPE_API_URL/api/v1/report" >/dev/null 2>&1 || true
 
-# ── GitHub annotations ──────────────────────────────────────────────
-if [ -n "$EXISTING_BLOCKED" ]; then
-    echo "$EXISTING_BLOCKED" | while IFS= read -r t; do
-        [ -n "$t" ] && echo "::error::DaPipe: blocked $t"
-    done
+# ── Labels ──────────────────────────────────────────────────────────
+if [ "$MODE" = "restrict" ]; then
+    L_EXIST="Blocked (existing)"
+    L_NEW="Blocked (new)"
+else
+    L_EXIST="Would be blocked (existing)"
+    L_NEW="Would be blocked (new)"
 fi
-if [ -n "$NEW_BLOCKED" ]; then
-    echo "$NEW_BLOCKED" | while IFS= read -r t; do
-        if [ "$MODE" = "restrict" ]; then
-            [ -n "$t" ] && echo "::error::DaPipe: blocked $t (new)"
-        else
-            [ -n "$t" ] && echo "::warning::DaPipe: new egress to $t"
-        fi
-    done
-fi
+
+# ── Annotations ─────────────────────────────────────────────────────
+[ -n "$EXISTING" ] && echo "$EXISTING" | while IFS= read -r t; do
+    [ -n "$t" ] && echo "::error::DaPipe: $t"
+done
+[ -n "$NEW" ] && echo "$NEW" | while IFS= read -r t; do
+    if [ "$MODE" = "restrict" ]; then
+        [ -n "$t" ] && echo "::error::DaPipe: $t (new)"
+    else
+        [ -n "$t" ] && echo "::warning::DaPipe: $t (new)"
+    fi
+done
 
 # ── Step summary ────────────────────────────────────────────────────
 if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
-    RESTRICT_LABEL="Blocked"
-    MONITOR_LABEL="Would be blocked"
-    LABEL="$MONITOR_LABEL"
-    [ "$MODE" = "restrict" ] && LABEL="$RESTRICT_LABEL"
-
     {
         echo "## DaPipe Egress Report"
         echo ""
         echo "| Metric | Value |"
         echo "|--------|-------|"
         echo "| Mode | \`$MODE\` |"
-        echo "| Allowed | $ALLOWED_COUNT |"
-        [ "$EXISTING_COUNT" -gt 0 ] && echo "| $LABEL (existing) | $EXISTING_COUNT |"
-        [ "$NEW_COUNT" -gt 0 ] && echo "| $LABEL (new) | $NEW_COUNT |"
+        echo "| Allowed | $A_COUNT |"
+        [ "$E_COUNT" -gt 0 ] && echo "| $L_EXIST | $E_COUNT |"
+        [ "$N_COUNT" -gt 0 ] && echo "| $L_NEW | $N_COUNT |"
         [ -n "$DURATION" ] && echo "| Pipeline duration | ${DURATION}s |"
         echo ""
 
         if [ -n "$ALLOWED" ]; then
             echo "### Allowed"
-            echo ""
             echo "| Target | Status |"
             echo "|--------|--------|"
             echo "$ALLOWED" | while IFS= read -r t; do
@@ -164,35 +155,32 @@ if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
             echo ""
         fi
 
-        if [ -n "$EXISTING_BLOCKED" ]; then
-            echo "### $LABEL (existing)"
-            echo ""
+        if [ -n "$EXISTING" ]; then
+            echo "### $L_EXIST"
             echo "| Target | Status |"
             echo "|--------|--------|"
-            echo "$EXISTING_BLOCKED" | while IFS= read -r t; do
-                [ -n "$t" ] && echo "| \`$t\` | :no_entry: $LABEL |"
+            echo "$EXISTING" | while IFS= read -r t; do
+                [ -n "$t" ] && echo "| \`$t\` | :no_entry: |"
             done
             echo ""
         fi
 
-        if [ -n "$NEW_BLOCKED" ]; then
-            echo "### $LABEL (new)"
-            echo ""
+        if [ -n "$NEW" ]; then
+            echo "### $L_NEW"
             echo "| Target | Status |"
             echo "|--------|--------|"
-            echo "$NEW_BLOCKED" | while IFS= read -r t; do
-                [ -n "$t" ] && echo "| \`$t\` | :warning: $LABEL |"
+            echo "$NEW" | while IFS= read -r t; do
+                [ -n "$t" ] && echo "| \`$t\` | :warning: |"
             done
             echo ""
         fi
     } >> "$GITHUB_STEP_SUMMARY"
 fi
 
-# ── Exit code ───────────────────────────────────────────────────────
-TOTAL_ISSUES=$((EXISTING_COUNT + NEW_COUNT))
-if [ "$MODE" = "restrict" ] && [ "$TOTAL_ISSUES" -gt 0 ]; then
-    echo "DaPipe: $TOTAL_ISSUES target(s) blocked."
+# ── Exit ────────────────────────────────────────────────────────────
+TOTAL=$((E_COUNT + N_COUNT))
+if [ "$MODE" = "restrict" ] && [ "$TOTAL" -gt 0 ]; then
+    echo "DaPipe: $TOTAL target(s) blocked."
     exit 1
 fi
-
-echo "DaPipe: $ALLOWED_COUNT allowed, $NEW_COUNT new target(s) observed."
+echo "DaPipe: $A_COUNT allowed, $N_COUNT new."
