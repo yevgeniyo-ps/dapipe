@@ -72,7 +72,21 @@ jobs:
           SHA="${{ steps.hash.outputs.sha256 }}"
           SIZE="${{ steps.hash.outputs.size }}"
 
-          NOTES='${{ steps.version.outputs.notes }}'
+          # Build JSON body safely using python to handle quotes in release notes
+          python3 -c "
+          import json, sys
+          notes = ${{ steps.version.outputs.notes }}
+          body = json.dumps({
+            'version': '${VERSION}',
+            'arch': '${ARCH}',
+            'file_size': ${SIZE},
+            'sha256_hash': '${SHA}',
+            'storage_path': '${VERSION}/linux-${ARCH}/dapipe_hook.so',
+            'is_latest': False,
+            'release_notes': notes
+          })
+          print(body)
+          " > /tmp/body.json
 
           curl -f -X POST \
             "${SUPABASE_URL}/rest/v1/agent_binaries" \
@@ -80,6 +94,6 @@ jobs:
             -H "apikey: ${SUPABASE_KEY}" \
             -H "Content-Type: application/json" \
             -H "Prefer: resolution=merge-duplicates" \
-            -d "{\"version\":\"${VERSION}\",\"arch\":\"${ARCH}\",\"file_size\":${SIZE},\"sha256_hash\":\"${SHA}\",\"storage_path\":\"${VERSION}/linux-${ARCH}/dapipe_hook.so\",\"is_latest\":false,\"release_notes\":${NOTES}}"
+            -d @/tmp/body.json
 
           echo "Upserted agent_binaries record for ${VERSION}/${ARCH}"
