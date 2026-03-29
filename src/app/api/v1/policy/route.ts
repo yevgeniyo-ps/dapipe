@@ -79,25 +79,29 @@ export async function GET(request: Request) {
     policy = data;
   }
 
-  // Fetch global threat intel (malicious endpoints)
-  const { data: maliciousEndpoints } = await supabase
+  // Fetch global base endpoints (safe + malicious) from BO
+  const { data: globalEndpoints } = await supabase
     .from("known_endpoints")
-    .select("domain")
-    .eq("type", "malicious");
+    .select("domain, type");
 
-  const threatDomains = (maliciousEndpoints || []).map(
-    (e: { domain: string }) => e.domain
-  );
+  const baseSafe = (globalEndpoints || [])
+    .filter((e: { type: string }) => e.type === "safe")
+    .map((e: { domain: string }) => e.domain);
+  const baseMalicious = (globalEndpoints || [])
+    .filter((e: { type: string }) => e.type === "malicious")
+    .map((e: { domain: string }) => e.domain);
 
-  // Default response if no policy exists — merge threat intel into blocked list
-  const policyBlocked = policy?.blocked_domains || [];
+  // Merge: base + customer policy
+  const mergedAllowed = [
+    ...new Set([...baseSafe, ...(policy?.allowed_domains || [])]),
+  ];
   const mergedBlocked = [
-    ...new Set([...policyBlocked, ...threatDomains]),
+    ...new Set([...baseMalicious, ...(policy?.blocked_domains || [])]),
   ];
 
   const response: PolicyResponse = {
     mode: policy?.mode || "monitor",
-    allowed_domains: policy?.allowed_domains || [],
+    allowed_domains: mergedAllowed,
     blocked_domains: mergedBlocked,
     blocked_ips: policy?.blocked_ips || [],
   };

@@ -311,6 +311,23 @@ export async function getMembers(orgId: string) {
   return data || [];
 }
 
+// ── Global Base Endpoints (from BO) ───────────────────────
+
+export async function getBaseEndpoints() {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("known_endpoints")
+    .select("domain, type")
+    .order("domain", { ascending: true });
+  const safe = (data || [])
+    .filter((e: { type: string }) => e.type === "safe")
+    .map((e: { domain: string }) => e.domain);
+  const malicious = (data || [])
+    .filter((e: { type: string }) => e.type === "malicious")
+    .map((e: { domain: string }) => e.domain);
+  return { allowed: safe, blocked: malicious };
+}
+
 // ── Settings ───────────────────────────────────────────────
 
 export async function getOrg(orgId: string) {
