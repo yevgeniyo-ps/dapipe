@@ -82,28 +82,24 @@ if [ -n "$REAL_DOMAINS" ]; then
 fi
 
 # Categorize observed IPs
-# Get resolved IPs of real domains (to exclude them)
-RESOLVED_IPS=$(echo "$FILTERED" | grep -E '"domain":"[a-zA-Z]' | sed -n 's/.*"ip":"\([^"]*\)".*/\1/p' | sort -u | grep -v '^$' || true)
-
-echo "[dbg] OBSERVED_IPS=[$OBSERVED_IPS]"
-echo "[dbg] RESOLVED_IPS=[$RESOLVED_IPS]"
-echo "[dbg] POLICY_BLOCKED_IPS=[$POLICY_BLOCKED_IPS]"
+# Only show IPs that are in the blocked IPs policy or were explicitly curled
+# All other IPs are resolved addresses / secondary connections — noise
 if [ -n "$OBSERVED_IPS" ]; then
+    # Get IPs that the user explicitly curled (appeared in domain field as an IP)
+    CURLED_IPS=$(echo "$FILTERED" | sed -n 's/.*"event":"dns".*"domain":"\([0-9][0-9.]*\)".*/\1/p' | sort -u | grep -v '^$' || true)
+
     while IFS= read -r ip; do
         [ -z "$ip" ] && continue
-        # Skip if this IP is just a resolved address of a domain we already categorized
-        if [ -n "$RESOLVED_IPS" ] && echo "$RESOLVED_IPS" | grep -qxF "$ip"; then
-            echo "[dbg] IP $ip skipped (resolved)"
-            continue
-        fi
-        # Categorize: in blocked IPs policy = would block/blocked, otherwise = new
+        # Only show if it's in blocked IPs policy OR was explicitly curled (dns event with IP as domain)
+        IS_CURLED=false
+        [ -n "$CURLED_IPS" ] && echo "$CURLED_IPS" | grep -qxF "$ip" && IS_CURLED=true
+
         if [ -n "$POLICY_BLOCKED_IPS" ] && echo "$POLICY_BLOCKED_IPS" | grep -qxF "$ip"; then
             WOULD_BLOCK="${WOULD_BLOCK}${ip} (IP)"$'\n'
-            echo "[dbg] IP $ip -> would_block"
-        else
+        elif [ "$IS_CURLED" = true ]; then
             NEW_DOMAINS="${NEW_DOMAINS}${ip} (IP)"$'\n'
-            echo "[dbg] IP $ip -> new"
         fi
+        # Skip all other IPs (resolved addresses, OCSP, TLS secondary connections)
     done <<< "$OBSERVED_IPS"
 fi
 
