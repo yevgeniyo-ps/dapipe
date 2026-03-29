@@ -42,10 +42,12 @@ DIRECT_CONNECT_IPS=$(echo "$FILTERED" | grep '"domain":""' | sed -n 's/.*"ip":"\
 if [ -n "$DIRECT_CONNECT_IPS" ]; then
     ALL_DOMAINS=$(printf '%s\n%s' "$ALL_DOMAINS" "$DIRECT_CONNECT_IPS" | sort -u | grep -v '^$' || true)
 fi
-# Blocked domains — only real domains, not IPs logged as domain
+# Blocked domains — only real domains, not IPs
 BLOCKED_DOMAINS=$(echo "$FILTERED" | grep '"blocked"' | sed -n 's/.*"domain":"\([^"]*\)".*/\1/p' | sort -u | grep -vE '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$' | grep -v '^$' || true)
-# Blocked IPs — only direct IPs (domain field is an IP = direct connection)
-BLOCKED_IPS=$(echo "$FILTERED" | grep '"blocked"' | sed -n 's/.*"domain":"\([0-9][0-9.]*\)".*/\1/p' | sort -u | grep -v '^$' || true)
+# Blocked IPs — from domain field (IP as domain) OR ip field when domain is empty/IP
+BLOCKED_IPS_FROM_DOMAIN=$(echo "$FILTERED" | grep '"blocked"' | sed -n 's/.*"domain":"\([0-9][0-9.]*[0-9]\)".*/\1/p' | sort -u | grep -v '^$' || true)
+BLOCKED_IPS_FROM_IP=$(echo "$FILTERED" | grep '"blocked"' | grep '"domain":""' | sed -n 's/.*"ip":"\([^"]*\)".*/\1/p' | sort -u | grep -v '^$' || true)
+BLOCKED_IPS=$(printf '%s\n%s' "$BLOCKED_IPS_FROM_DOMAIN" "$BLOCKED_IPS_FROM_IP" | sort -u | grep -v '^$' || true)
 
 # Split ALL_DOMAINS into real domains vs direct IPs (an IP looks like N.N.N.N)
 REAL_DOMAINS=""
@@ -202,11 +204,25 @@ if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
 
             KB_D=0; [ -n "$KNOWN_BLOCKED_DOMAINS" ] && KB_D=$(echo "$KNOWN_BLOCKED_DOMAINS" | wc -l | tr -d ' ')
             KB_I=0; [ -n "$KNOWN_BLOCKED_IPS" ] && KB_I=$(echo "$KNOWN_BLOCKED_IPS" | wc -l | tr -d ' ')
+            # Also find observed-but-not-blocked IPs (connected in restrict but not in any policy)
+            UNBLOCKED_NEW_IPS=""
+            if [ -n "$OBSERVED_IPS" ]; then
+                DOMAIN_RESOLVED_IPS2=$(echo "$FILTERED" | grep -E '"domain":"[a-zA-Z]' | sed -n 's/.*"ip":"\([^"]*\)".*/\1/p' | sort -u | grep -v '^$' || true)
+                while IFS= read -r ip; do
+                    [ -z "$ip" ] && continue
+                    [ -n "$DOMAIN_RESOLVED_IPS2" ] && echo "$DOMAIN_RESOLVED_IPS2" | grep -qxF "$ip" && continue
+                    [ -n "$POLICY_BLOCKED_IPS" ] && echo "$POLICY_BLOCKED_IPS" | grep -qxF "$ip" && continue
+                    UNBLOCKED_NEW_IPS="${UNBLOCKED_NEW_IPS}${ip}"$'\n'
+                done <<< "$OBSERVED_IPS"
+            fi
+            UNBLOCKED_NEW_IPS=$(echo "$UNBLOCKED_NEW_IPS" | sed '/^$/d' || true)
+
             NB_D=0; [ -n "$NEW_BLOCKED_DOMAINS" ] && NB_D=$(echo "$NEW_BLOCKED_DOMAINS" | wc -l | tr -d ' ')
             NB_I=0; [ -n "$NEW_BLOCKED_IPS" ] && NB_I=$(echo "$NEW_BLOCKED_IPS" | wc -l | tr -d ' ')
+            UNB_I=0; [ -n "$UNBLOCKED_NEW_IPS" ] && UNB_I=$(echo "$UNBLOCKED_NEW_IPS" | wc -l | tr -d ' ')
 
             [ "$KB_D" -gt 0 ] || [ "$KB_I" -gt 0 ] && echo "| Blocked (existing) | $((KB_D + KB_I)) |"
-            [ "$NB_D" -gt 0 ] || [ "$NB_I" -gt 0 ] && echo "| Blocked (new) | $((NB_D + NB_I)) |"
+            [ "$NB_D" -gt 0 ] || [ "$NB_I" -gt 0 ] || [ "$UNB_I" -gt 0 ] && echo "| Blocked (new) | $((NB_D + NB_I + UNB_I)) |"
         else
             [ "$WOULD_BLOCK_COUNT" -gt 0 ] && echo "| Would be blocked (existing) | $WOULD_BLOCK_COUNT |"
             [ "$NEW_DOMAIN_COUNT" -gt 0 ] && echo "| Would be blocked (new) | $NEW_DOMAIN_COUNT |"
@@ -242,7 +258,7 @@ if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
                 echo ""
             fi
             # Blocked (new)
-            if [ -n "$NEW_BLOCKED_DOMAINS" ] || [ -n "$NEW_BLOCKED_IPS" ]; then
+            if [ -n "$NEW_BLOCKED_DOMAINS" ] || [ -n "$NEW_BLOCKED_IPS" ] || [ -n "$UNBLOCKED_NEW_IPS" ]; then
                 echo "### Blocked (new)"
                 echo ""
                 echo "| Target | Type | Status |"
@@ -252,6 +268,9 @@ if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
                 done
                 [ -n "$NEW_BLOCKED_IPS" ] && echo "$NEW_BLOCKED_IPS" | while IFS= read -r ip; do
                     [ -n "$ip" ] && echo "| \`$ip\` | IP | :warning: new blocked |"
+                done
+                [ -n "$UNBLOCKED_NEW_IPS" ] && echo "$UNBLOCKED_NEW_IPS" | while IFS= read -r ip; do
+                    [ -n "$ip" ] && echo "| \`$ip\` | IP | :warning: new (not blocked!) |"
                 done
                 echo ""
             fi
