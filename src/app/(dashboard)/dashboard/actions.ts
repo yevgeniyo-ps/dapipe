@@ -247,23 +247,25 @@ export async function retryDeployment(deploymentId: string) {
 
 export async function getDashboardOverview(orgId: string) {
   const supabase = await createClient();
-  const [reposRes, reportsRes, blockedRes, cleanRes] = await Promise.all([
-    supabase.from("repos").select("id", { count: "exact", head: true }).eq("org_id", orgId),
-    supabase.from("reports").select("id", { count: "exact", head: true }).eq("org_id", orgId),
-    supabase.from("reports").select("id", { count: "exact", head: true }).eq("org_id", orgId).gt("blocked_count", 0),
-    supabase.from("reports").select("id", { count: "exact", head: true }).eq("org_id", orgId).eq("blocked_count", 0),
-  ]);
+  const [reposRes, reportsRes, blockedRes, cleanRes, monitorRes, restrictRes] =
+    await Promise.all([
+      supabase.from("repos").select("id", { count: "exact", head: true }).eq("org_id", orgId),
+      supabase.from("reports").select("id", { count: "exact", head: true }).eq("org_id", orgId),
+      supabase.from("reports").select("id", { count: "exact", head: true }).eq("org_id", orgId).gt("blocked_count", 0),
+      supabase.from("reports").select("id", { count: "exact", head: true }).eq("org_id", orgId).eq("blocked_count", 0),
+      supabase.from("reports").select("id", { count: "exact", head: true }).eq("org_id", orgId).eq("mode", "monitor"),
+      supabase.from("reports").select("id", { count: "exact", head: true }).eq("org_id", orgId).eq("mode", "restrict"),
+    ]);
   const { data: recentReports } = await supabase
-    .from("reports").select("*").eq("org_id", orgId).order("created_at", { ascending: false }).limit(8);
-  const { data: recentBlocked } = await supabase
-    .from("reports").select("*").eq("org_id", orgId).gt("blocked_count", 0).order("created_at", { ascending: false }).limit(5);
+    .from("reports").select("*").eq("org_id", orgId).order("created_at", { ascending: false }).limit(20);
   return {
     repoCount: reposRes.count || 0,
     reportCount: reportsRes.count || 0,
     blockedCount: blockedRes.count || 0,
     cleanCount: cleanRes.count || 0,
+    monitorCount: monitorRes.count || 0,
+    restrictCount: restrictRes.count || 0,
     recentReports: recentReports || [],
-    recentBlocked: recentBlocked || [],
   };
 }
 
