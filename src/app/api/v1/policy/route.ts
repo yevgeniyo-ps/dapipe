@@ -91,19 +91,33 @@ export async function GET(request: Request) {
     .filter((e: { type: string }) => e.type === "malicious")
     .map((e: { domain: string }) => e.domain);
 
-  // Merge: base + customer policy
-  const mergedAllowed = [
-    ...new Set([...baseSafe, ...(policy?.allowed_domains || [])]),
-  ];
-  const mergedBlocked = [
-    ...new Set([...baseMalicious, ...(policy?.blocked_domains || [])]),
-  ];
+  // BO has priority:
+  // - BO safe: always allowed, even if customer blocked it
+  // - BO malicious: always blocked, even if customer allowed it
+  const boSafeSet = new Set(baseSafe);
+  const boMaliciousSet = new Set(baseMalicious);
+
+  // Customer allowed minus BO malicious
+  const customerAllowed = (policy?.allowed_domains || []).filter(
+    (d: string) => !boMaliciousSet.has(d)
+  );
+  // Customer blocked minus BO safe
+  const customerBlocked = (policy?.blocked_domains || []).filter(
+    (d: string) => !boSafeSet.has(d)
+  );
+  // Customer blocked IPs minus BO safe IPs
+  const customerBlockedIps = (policy?.blocked_ips || []).filter(
+    (ip: string) => !boSafeSet.has(ip)
+  );
+
+  const mergedAllowed = [...new Set([...baseSafe, ...customerAllowed])];
+  const mergedBlocked = [...new Set([...baseMalicious, ...customerBlocked])];
 
   const response: PolicyResponse = {
     mode: policy?.mode || "monitor",
     allowed_domains: mergedAllowed,
     blocked_domains: mergedBlocked,
-    blocked_ips: policy?.blocked_ips || [],
+    blocked_ips: customerBlockedIps,
   };
 
   return NextResponse.json(response);
