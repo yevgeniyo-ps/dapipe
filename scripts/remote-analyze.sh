@@ -32,6 +32,12 @@ fi
 # This is the ONLY source of truth — getaddrinfo() calls.
 # Resolved IPs, TLS secondary connections, OCSP — none of these trigger getaddrinfo.
 # So they never appear here. Clean.
+# Debug: show all unique domain values from the log
+ALL_LOG_DOMAINS=$(sed -n 's/.*"domain":"\([^"]*\)".*/\1/p' "$LOG_FILE" | sort -u)
+echo "[dapipe-dbg] domains in log: $ALL_LOG_DOMAINS"
+ALL_LOG_IPS=$(sed -n 's/.*"ip":"\([^"]*\)".*/\1/p' "$LOG_FILE" | sort -u)
+echo "[dapipe-dbg] ips in log: $ALL_LOG_IPS"
+
 DNS_TARGETS=$(grep -E '"event":"(dns|blocked)"' "$LOG_FILE" \
     | sed -n 's/.*"domain":"\([^"]*\)".*/\1/p' \
     | grep -v "^$DAPIPE_HOST$" \
