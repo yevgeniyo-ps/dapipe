@@ -174,8 +174,46 @@ if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
         echo "| Allowed domains | $KNOWN_ALLOWED_COUNT |"
 
         if [ "$MODE" = "restrict" ]; then
-            echo "| Blocked domains | $BLOCKED_DOMAIN_COUNT |"
-            echo "| Blocked IPs | $BLOCKED_IP_COUNT |"
+            # Split blocked into known (in policy) vs new (not in any list)
+            KNOWN_BLOCKED_DOMAINS=""
+            NEW_BLOCKED_DOMAINS=""
+            if [ -n "$BLOCKED_DOMAINS" ]; then
+                while IFS= read -r d; do
+                    [ -z "$d" ] && continue
+                    if [ -n "$POLICY_BLOCKED" ] && echo "$POLICY_BLOCKED" | grep -qxF "$d"; then
+                        KNOWN_BLOCKED_DOMAINS="${KNOWN_BLOCKED_DOMAINS}${d}"$'\n'
+                    else
+                        NEW_BLOCKED_DOMAINS="${NEW_BLOCKED_DOMAINS}${d}"$'\n'
+                    fi
+                done <<< "$BLOCKED_DOMAINS"
+            fi
+            KNOWN_BLOCKED_DOMAINS=$(echo "$KNOWN_BLOCKED_DOMAINS" | sed '/^$/d' || true)
+            NEW_BLOCKED_DOMAINS=$(echo "$NEW_BLOCKED_DOMAINS" | sed '/^$/d' || true)
+
+            KNOWN_BLOCKED_IPS=""
+            NEW_BLOCKED_IPS=""
+            if [ -n "$BLOCKED_IPS" ]; then
+                while IFS= read -r ip; do
+                    [ -z "$ip" ] && continue
+                    if [ -n "$POLICY_BLOCKED_IPS" ] && echo "$POLICY_BLOCKED_IPS" | grep -qxF "$ip"; then
+                        KNOWN_BLOCKED_IPS="${KNOWN_BLOCKED_IPS}${ip}"$'\n'
+                    else
+                        NEW_BLOCKED_IPS="${NEW_BLOCKED_IPS}${ip}"$'\n'
+                    fi
+                done <<< "$BLOCKED_IPS"
+            fi
+            KNOWN_BLOCKED_IPS=$(echo "$KNOWN_BLOCKED_IPS" | sed '/^$/d' || true)
+            NEW_BLOCKED_IPS=$(echo "$NEW_BLOCKED_IPS" | sed '/^$/d' || true)
+
+            KB_D=0; [ -n "$KNOWN_BLOCKED_DOMAINS" ] && KB_D=$(echo "$KNOWN_BLOCKED_DOMAINS" | wc -l | tr -d ' ')
+            KB_I=0; [ -n "$KNOWN_BLOCKED_IPS" ] && KB_I=$(echo "$KNOWN_BLOCKED_IPS" | wc -l | tr -d ' ')
+            NB_D=0; [ -n "$NEW_BLOCKED_DOMAINS" ] && NB_D=$(echo "$NEW_BLOCKED_DOMAINS" | wc -l | tr -d ' ')
+            NB_I=0; [ -n "$NEW_BLOCKED_IPS" ] && NB_I=$(echo "$NEW_BLOCKED_IPS" | wc -l | tr -d ' ')
+
+            [ "$KB_D" -gt 0 ] && echo "| Blocked domains | $KB_D |"
+            [ "$KB_I" -gt 0 ] && echo "| Blocked IPs | $KB_I |"
+            [ "$NB_D" -gt 0 ] && echo "| New blocked domains | $NB_D |"
+            [ "$NB_I" -gt 0 ] && echo "| New blocked IPs | $NB_I |"
         else
             [ "$WOULD_BLOCK_COUNT" -gt 0 ] && echo "| Would be blocked in restrict | $WOULD_BLOCK_COUNT |"
             [ "$NEW_DOMAIN_COUNT" -gt 0 ] && echo "| New observed domains | $NEW_DOMAIN_COUNT |"
@@ -196,17 +234,31 @@ if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
         fi
 
         if [ "$MODE" = "restrict" ]; then
-            # Blocked
-            if [ "$TOTAL_BLOCKED" -gt 0 ]; then
-                echo "### Blocked"
+            # Known blocked (in egress rules)
+            if [ -n "$KNOWN_BLOCKED_DOMAINS" ] || [ -n "$KNOWN_BLOCKED_IPS" ]; then
+                echo "### Blocked (in egress rules)"
                 echo ""
                 echo "| Target | Type | Status |"
                 echo "|--------|------|--------|"
-                [ -n "$BLOCKED_DOMAINS" ] && echo "$BLOCKED_DOMAINS" | while IFS= read -r d; do
+                [ -n "$KNOWN_BLOCKED_DOMAINS" ] && echo "$KNOWN_BLOCKED_DOMAINS" | while IFS= read -r d; do
                     [ -n "$d" ] && echo "| \`$d\` | domain | :no_entry: blocked |"
                 done
-                [ -n "$BLOCKED_IPS" ] && echo "$BLOCKED_IPS" | while IFS= read -r ip; do
+                [ -n "$KNOWN_BLOCKED_IPS" ] && echo "$KNOWN_BLOCKED_IPS" | while IFS= read -r ip; do
                     [ -n "$ip" ] && echo "| \`$ip\` | IP | :no_entry: blocked |"
+                done
+                echo ""
+            fi
+            # New blocked (not in any egress rule — blocked because not in allowed list)
+            if [ -n "$NEW_BLOCKED_DOMAINS" ] || [ -n "$NEW_BLOCKED_IPS" ]; then
+                echo "### New blocked (not in egress rules)"
+                echo ""
+                echo "| Target | Type | Status |"
+                echo "|--------|------|--------|"
+                [ -n "$NEW_BLOCKED_DOMAINS" ] && echo "$NEW_BLOCKED_DOMAINS" | while IFS= read -r d; do
+                    [ -n "$d" ] && echo "| \`$d\` | domain | :warning: new blocked |"
+                done
+                [ -n "$NEW_BLOCKED_IPS" ] && echo "$NEW_BLOCKED_IPS" | while IFS= read -r ip; do
+                    [ -n "$ip" ] && echo "| \`$ip\` | IP | :warning: new blocked |"
                 done
                 echo ""
             fi
