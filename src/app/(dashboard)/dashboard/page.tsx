@@ -213,9 +213,8 @@ export default function DashboardPage() {
                                     {r.mode === "restrict" ? <Shield className="h-2.5 w-2.5 mr-0.5" /> : <Eye className="h-2.5 w-2.5 mr-0.5" />}
                                     {r.mode}
                                   </Badge>
-                                  {r.blocked_count > 0 && <span className="text-[11px] font-medium text-destructive tabular-nums">{r.blocked_count} blocked</span>}
                                   <Badge variant={r.blocked_count > 0 ? "destructive" : "secondary"} className="text-[10px]">
-                                    {r.blocked_count > 0 ? "blocked" : "clean"}
+                                    {r.blocked_count > 0 ? `${r.blocked_count} blocked` : "clean"}
                                   </Badge>
                                 </div>
 
