@@ -291,9 +291,11 @@ function RunDetail({ report: r, detail }: { report: Report; detail: any }) {
       .map((c: any) => c.domain)
   )] as string[];
 
-  // Direct IPs: from connect/blocked events where domain is empty, minus resolved IPs
+  // Direct IPs: from connect/blocked events where domain is empty
+  // Filter out resolved IPs UNLESS they're explicitly in the allowed/blocked policy
   const allDirectIps = Array.from(new Set(
-    conns.filter((c: any) => (!c.domain || c.domain === "") && c.ip && !resolvedIps.has(c.ip))
+    conns.filter((c: any) => (!c.domain || c.domain === "") && c.ip &&
+      (!resolvedIps.has(c.ip) || allAllowed.has(c.ip) || allBlocked.has(c.ip)))
       .map((c: any) => c.ip)
   )) as string[];
 
