@@ -316,7 +316,7 @@ export async function getMembers(orgId: string) {
 // ── Global Base Endpoints (from BO) ───────────────────────
 
 export async function getBaseEndpoints() {
-  const supabase = await createClient();
+  const supabase = createServiceClient();
   const { data } = await supabase
     .from("known_endpoints")
     .select("domain, type")
