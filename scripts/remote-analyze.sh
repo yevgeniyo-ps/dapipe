@@ -79,24 +79,24 @@ fi
 # Get resolved IPs of real domains (to exclude them)
 RESOLVED_IPS=$(echo "$FILTERED" | grep -E '"domain":"[a-zA-Z]' | sed -n 's/.*"ip":"\([^"]*\)".*/\1/p' | sort -u | grep -v '^$' || true)
 
-echo "::debug::OBSERVED_IPS=[$OBSERVED_IPS]"
-echo "::debug::RESOLVED_IPS=[$RESOLVED_IPS]"
-echo "::debug::POLICY_BLOCKED_IPS=[$POLICY_BLOCKED_IPS]"
+echo "[dbg] OBSERVED_IPS=[$OBSERVED_IPS]"
+echo "[dbg] RESOLVED_IPS=[$RESOLVED_IPS]"
+echo "[dbg] POLICY_BLOCKED_IPS=[$POLICY_BLOCKED_IPS]"
 if [ -n "$OBSERVED_IPS" ]; then
     while IFS= read -r ip; do
         [ -z "$ip" ] && continue
         # Skip if this IP is just a resolved address of a domain we already categorized
         if [ -n "$RESOLVED_IPS" ] && echo "$RESOLVED_IPS" | grep -qxF "$ip"; then
-            echo "::debug::IP $ip skipped (resolved)"
+            echo "[dbg] IP $ip skipped (resolved)"
             continue
         fi
         # Categorize: in blocked IPs policy = would block/blocked, otherwise = new
         if [ -n "$POLICY_BLOCKED_IPS" ] && echo "$POLICY_BLOCKED_IPS" | grep -qxF "$ip"; then
             WOULD_BLOCK="${WOULD_BLOCK}${ip} (IP)"$'\n'
-            echo "::debug::IP $ip -> would_block"
+            echo "[dbg] IP $ip -> would_block"
         else
             NEW_DOMAINS="${NEW_DOMAINS}${ip} (IP)"$'\n'
-            echo "::debug::IP $ip -> new"
+            echo "[dbg] IP $ip -> new"
         fi
     done <<< "$OBSERVED_IPS"
 fi
