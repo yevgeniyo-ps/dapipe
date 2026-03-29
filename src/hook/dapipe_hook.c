@@ -276,7 +276,7 @@ int connect(int sockfd, const struct sockaddr *addr, socklen_t addrlen) {
 
         /* In restrict mode, block IPs that weren't resolved from allowed domains. */
         if (is_restrict_mode() && !is_allowed_ip(ip_buf)) {
-            emit_log("blocked", domain[0] ? domain : ip_buf, ip_buf, port);
+            emit_log("blocked", domain, ip_buf, port);
             tls_hostname[0] = '\0';
             in_hook = 0;
             errno = ECONNREFUSED;

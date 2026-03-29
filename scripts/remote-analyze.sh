@@ -28,58 +28,19 @@ if [ -n "$POLICY" ]; then
 fi
 
 # ── Extract targets from log ────────────────────────────────────────
-# Primary: dns + blocked events (what processes tried to reach)
-# From domain field (getaddrinfo targets)
-DNS_DOMAINS=$(grep -E '"event":"(dns|blocked)"' "$LOG_FILE" \
+# ── Extract targets from dns/blocked events ONLY ───────────────────
+# This is the ONLY source of truth — getaddrinfo() calls.
+# Resolved IPs, TLS secondary connections, OCSP — none of these trigger getaddrinfo.
+# So they never appear here. Clean.
+DNS_TARGETS=$(grep -E '"event":"(dns|blocked)"' "$LOG_FILE" \
     | sed -n 's/.*"domain":"\([^"]*\)".*/\1/p' \
     | grep -v "^$DAPIPE_HOST$" \
     | sort -u | grep -v '^$' || true)
 
-# From ALL connect events — extract IPs (both blocked and allowed)
-ALL_CONNECT_IPS=$(grep -E '"event":"(connect|blocked)"' "$LOG_FILE" \
-    | sed -n 's/.*"ip":"\([^"]*\)".*/\1/p' \
-    | sort -u | grep -v '^$' || true)
-
-# IPs resolved from real domains (to exclude — these are noise)
-RESOLVED_IPS=$(grep -E '"domain":"[a-zA-Z]' "$LOG_FILE" \
-    | sed -n 's/.*"ip":"\([^"]*\)".*/\1/p' \
-    | sort -u | grep -v '^$' || true)
-
-# Direct IPs = all connect IPs minus resolved IPs from domains
-DIRECT_IPS=""
-if [ -n "$ALL_CONNECT_IPS" ]; then
-    while IFS= read -r ip; do
-        [ -z "$ip" ] && continue
-        if [ -n "$RESOLVED_IPS" ] && echo "$RESOLVED_IPS" | grep -qxF "$ip"; then
-            continue
-        fi
-        DIRECT_IPS="${DIRECT_IPS}${ip}"$'\n'
-    done <<< "$ALL_CONNECT_IPS"
-fi
-DIRECT_IPS=$(echo "$DIRECT_IPS" | sed '/^$/d' || true)
-
-# Merge all targets: dns domains + direct IPs
-DNS_TARGETS=$(printf '%s\n%s' "$DNS_DOMAINS" "$DIRECT_IPS" | sort -u | grep -v '^$' || true)
-
-# Blocked targets (from blocked events)
-BLOCKED_DOMAINS_RAW=$(grep '"event":"blocked"' "$LOG_FILE" \
+BLOCKED_TARGETS=$(grep '"event":"blocked"' "$LOG_FILE" \
     | sed -n 's/.*"domain":"\([^"]*\)".*/\1/p' \
     | grep -v "^$DAPIPE_HOST$" \
     | sort -u | grep -v '^$' || true)
-BLOCKED_IPS_RAW=$(grep '"event":"blocked"' "$LOG_FILE" \
-    | sed -n 's/.*"ip":"\([^"]*\)".*/\1/p' \
-    | sort -u | grep -v '^$' || true)
-# Filter blocked IPs to only direct ones
-DIRECT_BLOCKED_IPS=""
-if [ -n "$BLOCKED_IPS_RAW" ]; then
-    while IFS= read -r ip; do
-        [ -z "$ip" ] && continue
-        [ -n "$RESOLVED_IPS" ] && echo "$RESOLVED_IPS" | grep -qxF "$ip" && continue
-        DIRECT_BLOCKED_IPS="${DIRECT_BLOCKED_IPS}${ip}"$'\n'
-    done <<< "$BLOCKED_IPS_RAW"
-fi
-DIRECT_BLOCKED_IPS=$(echo "$DIRECT_BLOCKED_IPS" | sed '/^$/d' || true)
-BLOCKED_TARGETS=$(printf '%s\n%s' "$BLOCKED_DOMAINS_RAW" "$DIRECT_BLOCKED_IPS" | sort -u | grep -v '^$' || true)
 
 # ── Categorize ──────────────────────────────────────────────────────
 ALLOWED=""
