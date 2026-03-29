@@ -55,15 +55,28 @@ fi
 DAPIPE_HOST=$(echo "$DAPIPE_API_URL" | sed 's|https\?://||' | sed 's|/.*||')
 [ -n "$DAPIPE_HOST" ] && ALLOWED_DOMAINS="${ALLOWED_DOMAINS:+$ALLOWED_DOMAINS,}$DAPIPE_HOST"
 
-# Export to GITHUB_ENV
+# Export to GITHUB_ENV and mask values from logs
 if [ -n "${GITHUB_ENV:-}" ]; then
+    echo "::add-mask::$HOOK_SO"
+    echo "::add-mask::$DAPIPE_LOG_DIR"
     echo "LD_PRELOAD=$HOOK_SO" >> "$GITHUB_ENV"
     echo "DAPIPE_LOG_DIR=$DAPIPE_LOG_DIR" >> "$GITHUB_ENV"
     echo "DAPIPE_MODE=$MODE" >> "$GITHUB_ENV"
-    [ -n "$ALLOWED_DOMAINS" ] && echo "DAPIPE_ALLOWED_DOMAINS=$ALLOWED_DOMAINS" >> "$GITHUB_ENV"
-    [ -n "$BLOCKED_DOMAINS" ] && echo "DAPIPE_BLOCKED_DOMAINS=$BLOCKED_DOMAINS" >> "$GITHUB_ENV"
-    [ -n "$BLOCKED_IPS" ] && echo "DAPIPE_BLOCKED_IPS=$BLOCKED_IPS" >> "$GITHUB_ENV"
-    echo "DAPIPE_SETUP_START=$(date +%s)" >> "$GITHUB_ENV"
+    if [ -n "$ALLOWED_DOMAINS" ]; then
+        echo "::add-mask::$ALLOWED_DOMAINS"
+        echo "DAPIPE_ALLOWED_DOMAINS=$ALLOWED_DOMAINS" >> "$GITHUB_ENV"
+    fi
+    if [ -n "$BLOCKED_DOMAINS" ]; then
+        echo "::add-mask::$BLOCKED_DOMAINS"
+        echo "DAPIPE_BLOCKED_DOMAINS=$BLOCKED_DOMAINS" >> "$GITHUB_ENV"
+    fi
+    if [ -n "$BLOCKED_IPS" ]; then
+        echo "::add-mask::$BLOCKED_IPS"
+        echo "DAPIPE_BLOCKED_IPS=$BLOCKED_IPS" >> "$GITHUB_ENV"
+    fi
+    SETUP_TS=$(date +%s)
+    echo "::add-mask::$SETUP_TS"
+    echo "DAPIPE_SETUP_START=$SETUP_TS" >> "$GITHUB_ENV"
 fi
 
 echo "DaPipe: pipeline protection active (mode=$MODE)"
