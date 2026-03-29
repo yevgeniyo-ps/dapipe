@@ -87,8 +87,9 @@ fi
 # Any observed IP NOT in policy_allowed and NOT in policy_blocked = check if user explicitly curled it
 # Simple heuristic: if the IP is not a resolved address of any known domain, it's direct
 # For now, only report IPs from blocked_ips policy + truly unknown IPs not matching any resolved addr
-# Get all resolved IPs (IPs logged with a non-empty, non-IP domain)
-RESOLVED_IPS=$(echo "$FILTERED" | grep -v '"domain":""' | sed -n 's/.*"ip":"\([^"]*\)".*/\1/p' | sort -u | grep -v '^$' || true)
+# Get resolved IPs — only from entries where domain is a real domain (not an IP itself)
+# This excludes entries like domain="1.1.1.1" which are direct IP connections
+RESOLVED_IPS=$(echo "$FILTERED" | grep -E '"domain":"[a-zA-Z]' | sed -n 's/.*"ip":"\([^"]*\)".*/\1/p' | sort -u | grep -v '^$' || true)
 if [ -n "$OBSERVED_IPS" ]; then
     while IFS= read -r ip; do
         [ -z "$ip" ] && continue
