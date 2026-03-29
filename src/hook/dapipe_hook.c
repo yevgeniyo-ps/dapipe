@@ -99,7 +99,32 @@ static int is_domain_blocked(const char *domain) {
 }
 
 static int is_ip_blocked(const char *ip) {
-    return is_in_list("DAPIPE_BLOCKED_IPS", ip);
+    if (is_in_list("DAPIPE_BLOCKED_IPS", ip)) return 1;
+
+    /* In restrict mode, block IPs not resolved from allowed domains.
+       Check against the resolved_ips.txt file written by getaddrinfo. */
+    const char *allowed = getenv("DAPIPE_ALLOWED_DOMAINS");
+    if (!allowed || !allowed[0]) return 0;  /* not restrict mode */
+
+    const char *log_dir = getenv("DAPIPE_LOG_DIR");
+    if (!log_dir || !log_dir[0]) return 0;
+
+    char rpath[512];
+    snprintf(rpath, sizeof(rpath), "%s/resolved_ips.txt", log_dir);
+    FILE *f = fopen(rpath, "r");
+    if (!f) return 1;  /* no file = no allowed IPs = block */
+
+    char line[INET6_ADDRSTRLEN + 2];
+    while (fgets(line, sizeof(line), f)) {
+        size_t len = strlen(line);
+        if (len > 0 && line[len - 1] == '\n') line[len - 1] = '\0';
+        if (strcmp(line, ip) == 0) {
+            fclose(f);
+            return 0;  /* IP was resolved from an allowed domain */
+        }
+    }
+    fclose(f);
+    return 1;  /* IP not in resolved list = block */
 }
 
 static void emit_log(const char *event, const char *domain,
