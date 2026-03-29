@@ -36,6 +36,12 @@ fi
 
 # Unique observed domains (from "domain" field)
 ALL_DOMAINS=$(echo "$FILTERED" | sed -n 's/.*"domain":"\([^"]*\)".*/\1/p' | sort -u | grep -v '^$' || true)
+# Also capture direct IPs from connect events where domain is empty
+DIRECT_CONNECT_IPS=$(echo "$FILTERED" | grep '"domain":""' | sed -n 's/.*"ip":"\([^"]*\)".*/\1/p' | sort -u | grep -v '^$' || true)
+# Merge direct IPs into ALL_DOMAINS so they get categorized
+if [ -n "$DIRECT_CONNECT_IPS" ]; then
+    ALL_DOMAINS=$(printf '%s\n%s' "$ALL_DOMAINS" "$DIRECT_CONNECT_IPS" | sort -u | grep -v '^$' || true)
+fi
 # Blocked domains — only real domains, not IPs logged as domain
 BLOCKED_DOMAINS=$(echo "$FILTERED" | grep '"blocked"' | sed -n 's/.*"domain":"\([^"]*\)".*/\1/p' | sort -u | grep -vE '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$' | grep -v '^$' || true)
 # Blocked IPs — only direct IPs (domain field is an IP = direct connection)
