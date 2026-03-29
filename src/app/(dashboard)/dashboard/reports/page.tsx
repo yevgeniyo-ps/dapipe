@@ -1,14 +1,31 @@
-import { createClient } from "@/lib/supabase/server";
+"use client";
+
+import { useEffect, useState, useCallback } from "react";
+import { useInterval } from "@/lib/use-interval";
+import { useOrgId } from "@/components/org-context";
+import { getReports } from "../actions";
 import { Badge } from "@/components/ui/badge";
+import { Loader2 } from "lucide-react";
 import Link from "next/link";
 
-export default async function ReportsPage() {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  const { data: membership } = await supabase
-    .from("org_members").select("org_id").eq("user_id", user!.id).limit(1).maybeSingle();
-  const { data: reports } = await supabase
-    .from("reports").select("*").eq("org_id", membership?.org_id).order("created_at", { ascending: false }).limit(50);
+export default function ReportsPage() {
+  const orgId = useOrgId();
+  const [reports, setReports] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const load = useCallback(async () => {
+    if (!orgId) return;
+    try {
+      setReports(await getReports(orgId));
+    } finally {
+      setLoading(false);
+    }
+  }, [orgId]);
+
+  useEffect(() => { load(); }, [load]);
+  useInterval(load, 10000);
+
+  if (loading) return <div className="flex items-center justify-center py-20"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>;
 
   return (
     <div className="space-y-6">

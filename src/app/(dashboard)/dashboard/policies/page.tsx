@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
+import { useInterval } from "@/lib/use-interval";
 import { useOrgId } from "@/components/org-context";
 import { getPolicy, savePolicy } from "../actions";
 import { Button } from "@/components/ui/button";
@@ -18,22 +19,22 @@ export default function PoliciesPage() {
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
+  const load = useCallback(async () => {
     if (!orgId) { setLoading(false); return; }
-    async function load() {
-      try {
-        const data = await getPolicy(orgId!);
-        if (data) {
-          setPolicyId(data.id);
-          setMode(data.mode as PolicyMode);
-          setAllowedDomains(data.allowed_domains.join("\n"));
-          setBlockedDomains(data.blocked_domains.join("\n"));
-          setBlockedIps(data.blocked_ips.join("\n"));
-        }
-      } finally { setLoading(false); }
-    }
-    load();
+    try {
+      const data = await getPolicy(orgId);
+      if (data) {
+        setPolicyId(data.id);
+        setMode(data.mode as PolicyMode);
+        setAllowedDomains(data.allowed_domains.join("\n"));
+        setBlockedDomains(data.blocked_domains.join("\n"));
+        setBlockedIps(data.blocked_ips.join("\n"));
+      }
+    } finally { setLoading(false); }
   }, [orgId]);
+
+  useEffect(() => { load(); }, [load]);
+  useInterval(load, 10000);
 
   const handleSave = async () => {
     if (!orgId) return;

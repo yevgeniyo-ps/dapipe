@@ -1,14 +1,37 @@
-import { createClient } from "@/lib/supabase/server";
-import { notFound } from "next/navigation";
+"use client";
+
+import { useEffect, useState, useCallback } from "react";
+import { useInterval } from "@/lib/use-interval";
+import { useParams } from "next/navigation";
+import { getReportDetail } from "../../actions";
 import { Badge } from "@/components/ui/badge";
+import { Loader2 } from "lucide-react";
 import Link from "next/link";
 
-export default async function ReportDetailPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params;
-  const supabase = await createClient();
-  const { data: report } = await supabase.from("reports").select("*").eq("id", id).single();
-  if (!report) notFound();
-  const { data: connections } = await supabase.from("connections").select("*").eq("report_id", id).order("ts", { ascending: true });
+export default function ReportDetailPage() {
+  const { id } = useParams<{ id: string }>();
+  const [report, setReport] = useState<any>(null);
+  const [connections, setConnections] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [notFound, setNotFound] = useState(false);
+
+  const load = useCallback(async () => {
+    if (!id) return;
+    try {
+      const data = await getReportDetail(id);
+      if (!data) { setNotFound(true); return; }
+      setReport(data.report);
+      setConnections(data.connections);
+    } finally {
+      setLoading(false);
+    }
+  }, [id]);
+
+  useEffect(() => { load(); }, [load]);
+  useInterval(load, 10000);
+
+  if (loading) return <div className="flex items-center justify-center py-20"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>;
+  if (notFound || !report) return <p className="text-[13px] text-muted-foreground py-12 text-center">Report not found.</p>;
 
   return (
     <div className="space-y-6">

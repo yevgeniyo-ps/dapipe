@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
+import { useInterval } from "@/lib/use-interval";
 import { useOrgId } from "@/components/org-context";
 import { createApiKey, revokeApiKey, getApiKeys } from "../../actions";
 import { Button } from "@/components/ui/button";
@@ -18,9 +19,13 @@ export default function ApiKeysPage() {
   const [showCreate, setShowCreate] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => { if (!orgId) { setLoading(false); return; } loadKeys(orgId); }, [orgId]);
+  const loadKeys = useCallback(async () => {
+    if (!orgId) { setLoading(false); return; }
+    try { setKeys(await getApiKeys(orgId) as ApiKey[]); } finally { setLoading(false); }
+  }, [orgId]);
 
-  async function loadKeys(oid: string) { try { setKeys(await getApiKeys(oid) as ApiKey[]); } finally { setLoading(false); } }
+  useEffect(() => { loadKeys(); }, [loadKeys]);
+  useInterval(loadKeys, 10000);
 
   const handleCreate = async () => {
     if (!orgId) { setError("No organization found"); return; }
@@ -29,11 +34,11 @@ export default function ApiKeysPage() {
       const result = await createApiKey(orgId, newKeyName);
       if (result.error) { setError(result.error); setCreating(false); return; }
       setNewKeyValue(result.key);
-      await loadKeys(orgId);
+      await loadKeys();
     } catch (e: unknown) { setError(e instanceof Error ? e.message : "Failed"); } finally { setCreating(false); }
   };
 
-  const handleRevoke = async (keyId: string) => { if (!orgId) return; await revokeApiKey(keyId); await loadKeys(orgId); };
+  const handleRevoke = async (keyId: string) => { if (!orgId) return; await revokeApiKey(keyId); await loadKeys(); };
 
   if (loading) return <div className="flex items-center justify-center py-20"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>;
 

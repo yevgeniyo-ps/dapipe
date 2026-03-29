@@ -1,11 +1,30 @@
-import { createClient } from "@/lib/supabase/server";
-import { Badge } from "@/components/ui/badge";
+"use client";
 
-export default async function MembersPage() {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  const { data: membership } = await supabase.from("org_members").select("org_id").eq("user_id", user!.id).limit(1).maybeSingle();
-  const { data: members } = await supabase.from("org_members").select("*").eq("org_id", membership?.org_id).order("created_at", { ascending: true });
+import { useEffect, useState, useCallback } from "react";
+import { useInterval } from "@/lib/use-interval";
+import { useOrgId } from "@/components/org-context";
+import { getMembers } from "../../actions";
+import { Badge } from "@/components/ui/badge";
+import { Loader2 } from "lucide-react";
+
+export default function MembersPage() {
+  const orgId = useOrgId();
+  const [members, setMembers] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const load = useCallback(async () => {
+    if (!orgId) return;
+    try {
+      setMembers(await getMembers(orgId));
+    } finally {
+      setLoading(false);
+    }
+  }, [orgId]);
+
+  useEffect(() => { load(); }, [load]);
+  useInterval(load, 10000);
+
+  if (loading) return <div className="flex items-center justify-center py-20"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>;
 
   return (
     <div className="space-y-6 max-w-3xl">

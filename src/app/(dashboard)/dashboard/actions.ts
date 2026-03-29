@@ -243,6 +243,74 @@ export async function retryDeployment(deploymentId: string) {
   revalidatePath("/dashboard/deploy");
 }
 
+// ── Dashboard Overview ────────────────────────────────────
+
+export async function getDashboardOverview(orgId: string) {
+  const supabase = await createClient();
+  const [reposRes, reportsRes, blockedRes, cleanRes] = await Promise.all([
+    supabase.from("repos").select("id", { count: "exact", head: true }).eq("org_id", orgId),
+    supabase.from("reports").select("id", { count: "exact", head: true }).eq("org_id", orgId),
+    supabase.from("reports").select("id", { count: "exact", head: true }).eq("org_id", orgId).gt("blocked_count", 0),
+    supabase.from("reports").select("id", { count: "exact", head: true }).eq("org_id", orgId).eq("blocked_count", 0),
+  ]);
+  const { data: recentReports } = await supabase
+    .from("reports").select("*").eq("org_id", orgId).order("created_at", { ascending: false }).limit(8);
+  const { data: recentBlocked } = await supabase
+    .from("reports").select("*").eq("org_id", orgId).gt("blocked_count", 0).order("created_at", { ascending: false }).limit(5);
+  return {
+    repoCount: reposRes.count || 0,
+    reportCount: reportsRes.count || 0,
+    blockedCount: blockedRes.count || 0,
+    cleanCount: cleanRes.count || 0,
+    recentReports: recentReports || [],
+    recentBlocked: recentBlocked || [],
+  };
+}
+
+// ── Repos ─────────────────────────────────────────────────
+
+export async function getRepos(orgId: string) {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("repos").select("*").eq("org_id", orgId).order("created_at", { ascending: false });
+  return data || [];
+}
+
+export async function getRepoDetail(repoId: string) {
+  const supabase = await createClient();
+  const { data: repo } = await supabase.from("repos").select("*").eq("id", repoId).single();
+  if (!repo) return null;
+  const { data: policy } = await supabase.from("policies").select("*").eq("repo_id", repoId).limit(1).maybeSingle();
+  const { data: reports } = await supabase.from("reports").select("*").eq("repo_id", repoId).order("created_at", { ascending: false }).limit(10);
+  return { repo, policy, reports: reports || [] };
+}
+
+// ── Reports ───────────────────────────────────────────────
+
+export async function getReports(orgId: string) {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("reports").select("*").eq("org_id", orgId).order("created_at", { ascending: false }).limit(50);
+  return data || [];
+}
+
+export async function getReportDetail(reportId: string) {
+  const supabase = await createClient();
+  const { data: report } = await supabase.from("reports").select("*").eq("id", reportId).single();
+  if (!report) return null;
+  const { data: connections } = await supabase.from("connections").select("*").eq("report_id", reportId).order("ts", { ascending: true });
+  return { report, connections: connections || [] };
+}
+
+// ── Members ───────────────────────────────────────────────
+
+export async function getMembers(orgId: string) {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("org_members").select("*").eq("org_id", orgId).order("created_at", { ascending: true });
+  return data || [];
+}
+
 // ── Settings ───────────────────────────────────────────────
 
 export async function getOrg(orgId: string) {

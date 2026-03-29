@@ -1,34 +1,44 @@
-import { createClient } from "@/lib/supabase/server";
+"use client";
+
+import { useEffect, useState, useCallback } from "react";
+import { useInterval } from "@/lib/use-interval";
+import { useOrgId } from "@/components/org-context";
+import { getDashboardOverview } from "./actions";
 import { Badge } from "@/components/ui/badge";
-import { GitFork, ShieldCheck, FileBarChart, AlertTriangle, Activity, ArrowUpRight } from "lucide-react";
+import { GitFork, ShieldCheck, FileBarChart, AlertTriangle, Activity, ArrowUpRight, Loader2 } from "lucide-react";
 import Link from "next/link";
 
-export default async function DashboardPage() {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+export default function DashboardPage() {
+  const orgId = useOrgId();
+  const [loading, setLoading] = useState(true);
+  const [repoCount, setRepoCount] = useState(0);
+  const [reportCount, setReportCount] = useState(0);
+  const [blockedCount, setBlockedCount] = useState(0);
+  const [cleanCount, setCleanCount] = useState(0);
+  const [recentReports, setRecentReports] = useState<any[]>([]);
+  const [recentBlocked, setRecentBlocked] = useState<any[]>([]);
 
-  const { data: membership } = await supabase
-    .from("org_members").select("org_id").eq("user_id", user!.id).limit(1).maybeSingle();
-  const orgId = membership?.org_id;
+  const load = useCallback(async () => {
+    if (!orgId) return;
+    try {
+      const data = await getDashboardOverview(orgId);
+      setRepoCount(data.repoCount);
+      setReportCount(data.reportCount);
+      setBlockedCount(data.blockedCount);
+      setCleanCount(data.cleanCount);
+      setRecentReports(data.recentReports);
+      setRecentBlocked(data.recentBlocked);
+    } finally {
+      setLoading(false);
+    }
+  }, [orgId]);
 
-  const [reposRes, reportsRes, blockedRes, cleanRes] = await Promise.all([
-    supabase.from("repos").select("id", { count: "exact", head: true }).eq("org_id", orgId),
-    supabase.from("reports").select("id", { count: "exact", head: true }).eq("org_id", orgId),
-    supabase.from("reports").select("id", { count: "exact", head: true }).eq("org_id", orgId).gt("blocked_count", 0),
-    supabase.from("reports").select("id", { count: "exact", head: true }).eq("org_id", orgId).eq("blocked_count", 0),
-  ]);
+  useEffect(() => { load(); }, [load]);
+  useInterval(load, 10000);
 
-  const { data: recentReports } = await supabase
-    .from("reports").select("*").eq("org_id", orgId).order("created_at", { ascending: false }).limit(8);
-
-  const { data: recentBlocked } = await supabase
-    .from("reports").select("*").eq("org_id", orgId).gt("blocked_count", 0).order("created_at", { ascending: false }).limit(5);
-
-  const repoCount = reposRes.count || 0;
-  const reportCount = reportsRes.count || 0;
-  const blockedCount = blockedRes.count || 0;
-  const cleanCount = cleanRes.count || 0;
   const blockRate = reportCount > 0 ? Math.round((blockedCount / reportCount) * 100) : 0;
+
+  if (loading) return <div className="flex items-center justify-center py-20"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>;
 
   return (
     <div className="space-y-8">

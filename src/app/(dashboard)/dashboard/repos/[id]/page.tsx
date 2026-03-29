@@ -1,15 +1,39 @@
-import { createClient } from "@/lib/supabase/server";
-import { notFound } from "next/navigation";
+"use client";
+
+import { useEffect, useState, useCallback } from "react";
+import { useInterval } from "@/lib/use-interval";
+import { useParams } from "next/navigation";
+import { getRepoDetail } from "../../actions";
 import { Badge } from "@/components/ui/badge";
+import { Loader2 } from "lucide-react";
 import Link from "next/link";
 
-export default async function RepoDetailPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params;
-  const supabase = await createClient();
-  const { data: repo } = await supabase.from("repos").select("*").eq("id", id).single();
-  if (!repo) notFound();
-  const { data: policy } = await supabase.from("policies").select("*").eq("repo_id", id).limit(1).maybeSingle();
-  const { data: reports } = await supabase.from("reports").select("*").eq("repo_id", id).order("created_at", { ascending: false }).limit(10);
+export default function RepoDetailPage() {
+  const { id } = useParams<{ id: string }>();
+  const [repo, setRepo] = useState<any>(null);
+  const [policy, setPolicy] = useState<any>(null);
+  const [reports, setReports] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [notFound, setNotFound] = useState(false);
+
+  const load = useCallback(async () => {
+    if (!id) return;
+    try {
+      const data = await getRepoDetail(id);
+      if (!data) { setNotFound(true); return; }
+      setRepo(data.repo);
+      setPolicy(data.policy);
+      setReports(data.reports);
+    } finally {
+      setLoading(false);
+    }
+  }, [id]);
+
+  useEffect(() => { load(); }, [load]);
+  useInterval(load, 10000);
+
+  if (loading) return <div className="flex items-center justify-center py-20"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>;
+  if (notFound || !repo) return <p className="text-[13px] text-muted-foreground py-12 text-center">Repo not found.</p>;
 
   return (
     <div className="space-y-6">
