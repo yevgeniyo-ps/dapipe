@@ -130,7 +130,6 @@ export default function DashboardPage() {
                 <th className="px-4 py-3 text-left text-[11px] font-semibold text-muted-foreground uppercase tracking-[0.5px]">Pipeline</th>
                 <th className="px-4 py-3 text-left text-[11px] font-semibold text-muted-foreground uppercase tracking-[0.5px]">Branch</th>
                 <th className="px-4 py-3 text-center text-[11px] font-semibold text-muted-foreground uppercase tracking-[0.5px]">Mode</th>
-                <th className="px-4 py-3 text-center text-[11px] font-semibold text-muted-foreground uppercase tracking-[0.5px]">Connections</th>
                 <th className="px-4 py-3 text-center text-[11px] font-semibold text-muted-foreground uppercase tracking-[0.5px]">Blocked</th>
                 <th className="px-4 py-3 text-right text-[11px] font-semibold text-muted-foreground uppercase tracking-[0.5px]">Status</th>
               </tr>
@@ -210,7 +209,6 @@ function ReportRow({ report: r, isExpanded, isLoading, detail, onToggle }: {
             {r.mode}
           </Badge>
         </td>
-        <td className="px-4 py-3 text-center text-[13px] text-secondary-foreground tabular-nums">{r.connection_count}</td>
         <td className="px-4 py-3 text-center text-[13px] tabular-nums">
           {r.blocked_count > 0
             ? <span className="text-destructive font-medium">{r.blocked_count}</span>
@@ -225,7 +223,7 @@ function ReportRow({ report: r, isExpanded, isLoading, detail, onToggle }: {
       </tr>
       {isExpanded && (
         <tr className="border-b last:border-0">
-          <td colSpan={7} className="px-8 py-4 bg-accent/20">
+          <td colSpan={6} className="px-8 py-4 bg-accent/20">
             {isLoading ? (
               <div className="flex items-center justify-center py-6">
                 <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
