@@ -82,9 +82,9 @@ if [ -n "$TARGETS" ]; then
         LABEL="$t"
         [ "$IS_IP" = true ] && LABEL="$t (IP)"
 
-        # Check: is it in the allowed policy?
-        if [ "$IS_IP" = false ] && [ -n "$POLICY_ALLOWED" ] && echo "$POLICY_ALLOWED" | grep -qxF "$t"; then
-            ALLOWED="${ALLOWED}${t}"$'\n'
+        # Check: is it in the allowed policy? (domains and IPs both checked)
+        if [ -n "$POLICY_ALLOWED" ] && echo "$POLICY_ALLOWED" | grep -qxF "$t"; then
+            ALLOWED="${ALLOWED}${LABEL}"$'\n'
             continue
         fi
 
@@ -93,7 +93,7 @@ if [ -n "$TARGETS" ]; then
         if [ "$IS_IP" = true ] && [ -n "$POLICY_BLOCKED_IPS" ] && echo "$POLICY_BLOCKED_IPS" | grep -qxF "$t"; then
             IN_POLICY=true
         fi
-        if [ "$IS_IP" = false ] && [ -n "$POLICY_BLOCKED" ] && echo "$POLICY_BLOCKED" | grep -qxF "$t"; then
+        if [ -n "$POLICY_BLOCKED" ] && echo "$POLICY_BLOCKED" | grep -qxF "$t"; then
             IN_POLICY=true
         fi
 
