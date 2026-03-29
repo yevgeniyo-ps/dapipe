@@ -105,10 +105,12 @@ fi
 if [ -n "${GITHUB_ENV:-}" ]; then
     echo "LD_PRELOAD=$HOOK_SO" >> "$GITHUB_ENV"
     echo "DAPIPE_LOG_DIR=$LOG_DIR" >> "$GITHUB_ENV"
-    [ -n "$ALLOWED_DOMAINS" ] && echo "DAPIPE_ALLOWED_DOMAINS=$ALLOWED_DOMAINS" >> "$GITHUB_ENV"
-    [ -n "$BLOCKED_DOMAINS" ] && echo "DAPIPE_BLOCKED_DOMAINS=$BLOCKED_DOMAINS" >> "$GITHUB_ENV"
-    [ -n "$BLOCKED_IPS" ] && echo "DAPIPE_BLOCKED_IPS=$BLOCKED_IPS" >> "$GITHUB_ENV"
     echo "DAPIPE_SETUP_START=$(date +%s)" >> "$GITHUB_ENV"
+    if [ "$MODE" = "restrict" ]; then
+        [ -n "$ALLOWED_DOMAINS" ] && echo "DAPIPE_ALLOWED_DOMAINS=$ALLOWED_DOMAINS" >> "$GITHUB_ENV"
+        [ -n "$BLOCKED_DOMAINS" ] && echo "DAPIPE_BLOCKED_DOMAINS=$BLOCKED_DOMAINS" >> "$GITHUB_ENV"
+        [ -n "$BLOCKED_IPS" ] && echo "DAPIPE_BLOCKED_IPS=$BLOCKED_IPS" >> "$GITHUB_ENV"
+    fi
 fi
 
 echo "::endgroup::"

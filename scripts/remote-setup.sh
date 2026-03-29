@@ -63,10 +63,14 @@ if [ -n "${GITHUB_ENV:-}" ]; then
     echo "LD_PRELOAD=$HOOK_SO" >> "$GITHUB_ENV"
     echo "DAPIPE_LOG_DIR=$DAPIPE_LOG_DIR" >> "$GITHUB_ENV"
     echo "DAPIPE_MODE=$MODE" >> "$GITHUB_ENV"
-    [ -n "$ALLOWED_DOMAINS" ] && echo "DAPIPE_ALLOWED_DOMAINS=$ALLOWED_DOMAINS" >> "$GITHUB_ENV"
-    [ -n "$BLOCKED_DOMAINS" ] && echo "DAPIPE_BLOCKED_DOMAINS=$BLOCKED_DOMAINS" >> "$GITHUB_ENV"
-    [ -n "$BLOCKED_IPS" ] && echo "DAPIPE_BLOCKED_IPS=$BLOCKED_IPS" >> "$GITHUB_ENV"
     echo "DAPIPE_SETUP_START=$SETUP_TS" >> "$GITHUB_ENV"
+    # In restrict mode, pass allowed/blocked lists to the hook for enforcement
+    # In monitor mode, only log — don't pass lists so the hook doesn't block anything
+    if [ "$MODE" = "restrict" ]; then
+        [ -n "$ALLOWED_DOMAINS" ] && echo "DAPIPE_ALLOWED_DOMAINS=$ALLOWED_DOMAINS" >> "$GITHUB_ENV"
+        [ -n "$BLOCKED_DOMAINS" ] && echo "DAPIPE_BLOCKED_DOMAINS=$BLOCKED_DOMAINS" >> "$GITHUB_ENV"
+        [ -n "$BLOCKED_IPS" ] && echo "DAPIPE_BLOCKED_IPS=$BLOCKED_IPS" >> "$GITHUB_ENV"
+    fi
 fi
 
 echo "DaPipe: pipeline protection active (mode=$MODE)"
