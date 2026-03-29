@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import {
   GitFork, ShieldCheck, FileBarChart, AlertTriangle, Activity,
   Eye, Shield, Loader2, ChevronDown, ChevronRight, ExternalLink,
-  Check, Ban,
+  Check, Ban, Cpu,
 } from "lucide-react";
 
 type Filter = "all" | "clean" | "blocked" | "monitor" | "restrict";
@@ -17,6 +17,7 @@ interface Report {
   id: string;
   repo_full_name: string;
   workflow_name: string;
+  job_name: string;
   run_id: string;
   run_url: string;
   branch: string;
@@ -41,8 +42,7 @@ export default function DashboardPage() {
     recentReports: Report[];
   } | null>(null);
   const [filter, setFilter] = useState<Filter>("all");
-  const [expandedRepos, setExpandedRepos] = useState<Set<string>>(new Set());
-  const [expandedWorkflows, setExpandedWorkflows] = useState<Set<string>>(new Set());
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [expandedRun, setExpandedRun] = useState<string | null>(null);
   const [runDetail, setRunDetail] = useState<any>(null);
   const [runLoading, setRunLoading] = useState(false);
@@ -59,16 +59,8 @@ export default function DashboardPage() {
   useEffect(() => { load(); }, [load]);
   useInterval(load, 10000);
 
-  const toggleRepo = (repo: string) => {
-    setExpandedRepos((prev) => {
-      const next = new Set(prev);
-      next.has(repo) ? next.delete(repo) : next.add(repo);
-      return next;
-    });
-  };
-
-  const toggleWorkflow = (key: string) => {
-    setExpandedWorkflows((prev) => {
+  const toggle = (key: string) => {
+    setExpanded((prev) => {
       const next = new Set(prev);
       next.has(key) ? next.delete(key) : next.add(key);
       return next;
@@ -76,18 +68,10 @@ export default function DashboardPage() {
   };
 
   const toggleRun = async (id: string) => {
-    if (expandedRun === id) {
-      setExpandedRun(null);
-      setRunDetail(null);
-      return;
-    }
+    if (expandedRun === id) { setExpandedRun(null); setRunDetail(null); return; }
     setExpandedRun(id);
     setRunLoading(true);
-    try {
-      setRunDetail(await getReportDetail(id));
-    } finally {
-      setRunLoading(false);
-    }
+    try { setRunDetail(await getReportDetail(id)); } finally { setRunLoading(false); }
   };
 
   if (loading) return <div className="flex items-center justify-center py-20"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>;
@@ -103,14 +87,16 @@ export default function DashboardPage() {
     return true;
   });
 
-  // Group: repo → workflow → runs
-  const grouped: Record<string, Record<string, Report[]>> = {};
+  // Group: repo → workflow → job → runs
+  const tree: Record<string, Record<string, Record<string, Report[]>>> = {};
   for (const r of filtered) {
     const repo = r.repo_full_name;
-    const wf = r.workflow_name || "default";
-    if (!grouped[repo]) grouped[repo] = {};
-    if (!grouped[repo][wf]) grouped[repo][wf] = [];
-    grouped[repo][wf].push(r);
+    const wf = r.workflow_name || "workflow";
+    const job = r.job_name || "build";
+    if (!tree[repo]) tree[repo] = {};
+    if (!tree[repo][wf]) tree[repo][wf] = {};
+    if (!tree[repo][wf][job]) tree[repo][wf][job] = [];
+    tree[repo][wf][job].push(r);
   }
 
   const filters: { key: Filter; label: string; count: number }[] = [
@@ -120,6 +106,11 @@ export default function DashboardPage() {
     { key: "monitor", label: "Monitor", count: data.monitorCount },
     { key: "restrict", label: "Restrict", count: data.restrictCount },
   ];
+
+  const Chevron = ({ open }: { open: boolean }) =>
+    open ? <ChevronDown className="h-3.5 w-3.5 text-muted-foreground shrink-0" /> : <ChevronRight className="h-3.5 w-3.5 text-muted-foreground shrink-0" />;
+
+  const countBlocked = (reports: Report[]) => reports.filter((r) => r.blocked_count > 0).length;
 
   return (
     <div className="space-y-6">
@@ -146,129 +137,107 @@ export default function DashboardPage() {
 
       <div className="flex gap-1 rounded-lg bg-muted p-[3px] w-fit">
         {filters.map((f) => (
-          <button
-            key={f.key}
-            onClick={() => setFilter(f.key)}
-            className={`rounded-md px-3 py-1.5 text-[13px] font-medium transition-colors ${
-              filter === f.key
-                ? "bg-background text-foreground shadow-sm"
-                : "text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            {f.label}
-            <span className="ml-1.5 text-[11px] text-muted-foreground">({f.count})</span>
+          <button key={f.key} onClick={() => setFilter(f.key)}
+            className={`rounded-md px-3 py-1.5 text-[13px] font-medium transition-colors ${filter === f.key ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}>
+            {f.label}<span className="ml-1.5 text-[11px] text-muted-foreground">({f.count})</span>
           </button>
         ))}
       </div>
 
-      {/* Grouped tree */}
       <div className="rounded-2xl border overflow-hidden divide-y">
-        {Object.keys(grouped).length === 0 ? (
+        {Object.keys(tree).length === 0 ? (
           <p className="text-[13px] text-muted-foreground py-12 text-center">No reports match this filter.</p>
-        ) : (
-          Object.entries(grouped).map(([repo, workflows]) => {
-            const repoExpanded = expandedRepos.has(repo);
-            const repoRuns = Object.values(workflows).flat();
-            const repoBlocked = repoRuns.filter((r) => r.blocked_count > 0).length;
+        ) : Object.entries(tree).map(([repo, workflows]) => {
+          const repoKey = repo;
+          const repoOpen = expanded.has(repoKey);
+          const allRuns = Object.values(workflows).flatMap((jobs) => Object.values(jobs).flat());
+          const blocked = countBlocked(allRuns);
 
-            return (
-              <div key={repo}>
-                {/* Repo row */}
-                <div
-                  className="flex items-center gap-3 px-4 py-3 hover:bg-accent cursor-pointer"
-                  onClick={() => toggleRepo(repo)}
-                >
-                  {repoExpanded
-                    ? <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />
-                    : <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
-                  }
-                  <GitFork className="h-4 w-4 text-muted-foreground shrink-0" />
-                  <span className="text-[13px] font-semibold flex-1">{repo}</span>
-                  <span className="text-[12px] text-muted-foreground">{repoRuns.length} run{repoRuns.length !== 1 ? "s" : ""}</span>
-                  {repoBlocked > 0 && (
-                    <Badge variant="destructive" className="text-[10px]">{repoBlocked} blocked</Badge>
-                  )}
-                </div>
+          return (
+            <div key={repo}>
+              {/* ── Repo ── */}
+              <div className="flex items-center gap-3 px-4 py-3 hover:bg-accent cursor-pointer" onClick={() => toggle(repoKey)}>
+                <Chevron open={repoOpen} />
+                <GitFork className="h-4 w-4 text-muted-foreground shrink-0" />
+                <span className="text-[13px] font-semibold flex-1">{repo}</span>
+                <span className="text-[12px] text-muted-foreground">{allRuns.length} runs</span>
+                {blocked > 0 && <Badge variant="destructive" className="text-[10px]">{blocked} blocked</Badge>}
+              </div>
 
-                {/* Workflows */}
-                {repoExpanded && Object.entries(workflows).map(([wf, runs]) => {
-                  const wfKey = `${repo}/${wf}`;
-                  const wfExpanded = expandedWorkflows.has(wfKey);
-                  const wfBlocked = runs.filter((r) => r.blocked_count > 0).length;
+              {repoOpen && Object.entries(workflows).map(([wf, jobs]) => {
+                const wfKey = `${repo}/${wf}`;
+                const wfOpen = expanded.has(wfKey);
+                const wfRuns = Object.values(jobs).flat();
+                const wfBlocked = countBlocked(wfRuns);
 
-                  return (
-                    <div key={wfKey}>
-                      {/* Workflow row */}
-                      <div
-                        className="flex items-center gap-3 pl-10 pr-4 py-2.5 hover:bg-accent cursor-pointer border-t border-border/50"
-                        onClick={() => toggleWorkflow(wfKey)}
-                      >
-                        {wfExpanded
-                          ? <ChevronDown className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                          : <ChevronRight className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                        }
-                        <FileBarChart className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                        <span className="text-[13px] font-medium flex-1">{wf}</span>
-                        <span className="text-[11px] text-muted-foreground">{runs.length} run{runs.length !== 1 ? "s" : ""}</span>
-                        {wfBlocked > 0 && (
-                          <Badge variant="destructive" className="text-[10px]">{wfBlocked}</Badge>
-                        )}
-                      </div>
+                return (
+                  <div key={wfKey}>
+                    {/* ── Workflow ── */}
+                    <div className="flex items-center gap-3 pl-10 pr-4 py-2.5 hover:bg-accent cursor-pointer border-t border-border/50" onClick={() => toggle(wfKey)}>
+                      <Chevron open={wfOpen} />
+                      <FileBarChart className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                      <span className="text-[13px] font-medium flex-1">{wf}</span>
+                      <span className="text-[11px] text-muted-foreground">{wfRuns.length} runs</span>
+                      {wfBlocked > 0 && <Badge variant="destructive" className="text-[10px]">{wfBlocked}</Badge>}
+                    </div>
 
-                      {/* Runs */}
-                      {wfExpanded && runs.map((r) => {
-                        const isRunExpanded = expandedRun === r.id;
-                        return (
-                          <div key={r.id}>
-                            <div
-                              className="flex items-center gap-3 pl-16 pr-4 py-2 hover:bg-accent cursor-pointer border-t border-border/30"
-                              onClick={() => toggleRun(r.id)}
-                            >
-                              {isRunExpanded
-                                ? <ChevronDown className="h-3 w-3 text-muted-foreground shrink-0" />
-                                : <ChevronRight className="h-3 w-3 text-muted-foreground shrink-0" />
-                              }
-                              <div className="flex-1 min-w-0">
-                                <div className="flex items-center gap-2">
-                                  <span className="text-[12px] font-mono text-secondary-foreground">{r.branch}</span>
+                    {wfOpen && Object.entries(jobs).map(([job, runs]) => {
+                      const jobKey = `${wfKey}/${job}`;
+                      const jobOpen = expanded.has(jobKey);
+                      const jobBlocked = countBlocked(runs);
+
+                      return (
+                        <div key={jobKey}>
+                          {/* ── Job ── */}
+                          <div className="flex items-center gap-3 pl-16 pr-4 py-2 hover:bg-accent cursor-pointer border-t border-border/40" onClick={() => toggle(jobKey)}>
+                            <Chevron open={jobOpen} />
+                            <Cpu className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                            <span className="text-[12px] font-medium flex-1">{job}</span>
+                            <span className="text-[11px] text-muted-foreground">{runs.length} runs</span>
+                            {jobBlocked > 0 && <Badge variant="destructive" className="text-[10px]">{jobBlocked}</Badge>}
+                          </div>
+
+                          {jobOpen && runs.map((r) => {
+                            const isRunOpen = expandedRun === r.id;
+                            return (
+                              <div key={r.id}>
+                                {/* ── Run ── */}
+                                <div className="flex items-center gap-3 pl-24 pr-4 py-2 hover:bg-accent cursor-pointer border-t border-border/30" onClick={() => toggleRun(r.id)}>
+                                  <Chevron open={isRunOpen} />
                                   <span className="text-[11px] font-mono text-muted-foreground">{r.commit_sha?.slice(0, 7)}</span>
                                   <span className="text-[11px] text-muted-foreground">{timeAgo(r.created_at)}</span>
+                                  <div className="flex-1" />
+                                  <Badge variant="secondary" className={`text-[10px] ${r.mode === "restrict" ? "bg-amber-500/15 text-amber-400" : ""}`}>
+                                    {r.mode === "restrict" ? <Shield className="h-2.5 w-2.5 mr-0.5" /> : <Eye className="h-2.5 w-2.5 mr-0.5" />}
+                                    {r.mode}
+                                  </Badge>
+                                  {r.blocked_count > 0 && <span className="text-[11px] font-medium text-destructive tabular-nums">{r.blocked_count} blocked</span>}
+                                  <Badge variant={r.blocked_count > 0 ? "destructive" : "secondary"} className="text-[10px]">
+                                    {r.blocked_count > 0 ? "blocked" : "clean"}
+                                  </Badge>
                                 </div>
-                              </div>
-                              <Badge variant="secondary" className={`text-[10px] ${r.mode === "restrict" ? "bg-amber-500/15 text-amber-400" : ""}`}>
-                                {r.mode === "restrict" ? <Shield className="h-2.5 w-2.5 mr-0.5" /> : <Eye className="h-2.5 w-2.5 mr-0.5" />}
-                                {r.mode}
-                              </Badge>
-                              {r.blocked_count > 0 && (
-                                <span className="text-[12px] font-medium text-destructive tabular-nums">{r.blocked_count} blocked</span>
-                              )}
-                              <Badge variant={r.blocked_count > 0 ? "destructive" : "secondary"} className="text-[10px]">
-                                {r.blocked_count > 0 ? "blocked" : "clean"}
-                              </Badge>
-                            </div>
 
-                            {/* Expanded run detail */}
-                            {isRunExpanded && (
-                              <div className="pl-20 pr-4 py-3 bg-accent/20 border-t border-border/30">
-                                {runLoading ? (
-                                  <div className="flex items-center justify-center py-4">
-                                    <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                                {isRunOpen && (
+                                  <div className="pl-28 pr-4 py-3 bg-accent/20 border-t border-border/30">
+                                    {runLoading ? (
+                                      <div className="flex items-center justify-center py-4"><Loader2 className="h-4 w-4 animate-spin text-muted-foreground" /></div>
+                                    ) : (
+                                      <RunDetail report={r} detail={runDetail} />
+                                    )}
                                   </div>
-                                ) : (
-                                  <RunDetail report={r} detail={runDetail} />
                                 )}
                               </div>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  );
-                })}
-              </div>
-            );
-          })
-        )}
+                            );
+                          })}
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              })}
+            </div>
+          );
+        })}
       </div>
     </div>
   );
@@ -313,21 +282,13 @@ function RunDetail({ report: r, detail }: { report: Report; detail: any }) {
             {uniqueAllowed.map((t) => (
               <tr key={`a-${t}`} className="border-b last:border-0">
                 <td className="px-3 py-2 text-[12px] font-mono">{t}</td>
-                <td className="px-3 py-2">
-                  <span className="inline-flex items-center gap-1.5 text-[12px] text-muted-foreground">
-                    <Check className="h-3 w-3" /> allowed
-                  </span>
-                </td>
+                <td className="px-3 py-2"><span className="inline-flex items-center gap-1.5 text-[12px] text-muted-foreground"><Check className="h-3 w-3" /> allowed</span></td>
               </tr>
             ))}
             {uniqueBlocked.map((t) => (
               <tr key={`b-${t}`} className="border-b last:border-0">
                 <td className="px-3 py-2 text-[12px] font-mono">{t}</td>
-                <td className="px-3 py-2">
-                  <span className="inline-flex items-center gap-1.5 text-[12px] text-destructive">
-                    <Ban className="h-3 w-3" /> blocked
-                  </span>
-                </td>
+                <td className="px-3 py-2"><span className="inline-flex items-center gap-1.5 text-[12px] text-destructive"><Ban className="h-3 w-3" /> blocked</span></td>
               </tr>
             ))}
           </tbody>
