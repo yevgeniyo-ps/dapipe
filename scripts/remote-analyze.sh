@@ -210,13 +210,11 @@ if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
             NB_D=0; [ -n "$NEW_BLOCKED_DOMAINS" ] && NB_D=$(echo "$NEW_BLOCKED_DOMAINS" | wc -l | tr -d ' ')
             NB_I=0; [ -n "$NEW_BLOCKED_IPS" ] && NB_I=$(echo "$NEW_BLOCKED_IPS" | wc -l | tr -d ' ')
 
-            [ "$KB_D" -gt 0 ] && echo "| Blocked domains | $KB_D |"
-            [ "$KB_I" -gt 0 ] && echo "| Blocked IPs | $KB_I |"
-            [ "$NB_D" -gt 0 ] && echo "| New blocked domains | $NB_D |"
-            [ "$NB_I" -gt 0 ] && echo "| New blocked IPs | $NB_I |"
+            [ "$KB_D" -gt 0 ] || [ "$KB_I" -gt 0 ] && echo "| Blocked (existing) | $((KB_D + KB_I)) |"
+            [ "$NB_D" -gt 0 ] || [ "$NB_I" -gt 0 ] && echo "| Blocked (new) | $((NB_D + NB_I)) |"
         else
-            [ "$WOULD_BLOCK_COUNT" -gt 0 ] && echo "| Would be blocked in restrict | $WOULD_BLOCK_COUNT |"
-            [ "$NEW_DOMAIN_COUNT" -gt 0 ] && echo "| New observed domains | $NEW_DOMAIN_COUNT |"
+            [ "$WOULD_BLOCK_COUNT" -gt 0 ] && echo "| Would be blocked (existing) | $WOULD_BLOCK_COUNT |"
+            [ "$NEW_DOMAIN_COUNT" -gt 0 ] && echo "| Would be blocked (new) | $NEW_DOMAIN_COUNT |"
         fi
         [ -n "$DURATION" ] && echo "| Pipeline duration | ${DURATION}s |"
         echo ""
@@ -234,9 +232,9 @@ if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
         fi
 
         if [ "$MODE" = "restrict" ]; then
-            # Known blocked (in egress rules)
+            # Blocked (existing)
             if [ -n "$KNOWN_BLOCKED_DOMAINS" ] || [ -n "$KNOWN_BLOCKED_IPS" ]; then
-                echo "### Blocked (in egress rules)"
+                echo "### Blocked (existing)"
                 echo ""
                 echo "| Target | Type | Status |"
                 echo "|--------|------|--------|"
@@ -248,9 +246,9 @@ if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
                 done
                 echo ""
             fi
-            # New blocked (not in any egress rule — blocked because not in allowed list)
+            # Blocked (new)
             if [ -n "$NEW_BLOCKED_DOMAINS" ] || [ -n "$NEW_BLOCKED_IPS" ]; then
-                echo "### New blocked (not in egress rules)"
+                echo "### Blocked (new)"
                 echo ""
                 echo "| Target | Type | Status |"
                 echo "|--------|------|--------|"
@@ -263,9 +261,9 @@ if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
                 echo ""
             fi
         else
-            # Would be blocked in restrict mode
+            # Would be blocked (existing)
             if [ "$WOULD_BLOCK_COUNT" -gt 0 ]; then
-                echo "### Would be blocked in restrict mode"
+                echo "### Would be blocked (existing)"
                 echo ""
                 echo "| Target | Status |"
                 echo "|--------|--------|"
@@ -274,14 +272,14 @@ if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
                 done
                 echo ""
             fi
-            # New / unknown
+            # Would be blocked (new)
             if [ "$NEW_DOMAIN_COUNT" -gt 0 ]; then
-                echo "### New (not in egress rules)"
+                echo "### Would be blocked (new)"
                 echo ""
-                echo "| Domain | Status |"
+                echo "| Target | Status |"
                 echo "|--------|--------|"
                 echo "$NEW_DOMAINS" | while IFS= read -r d; do
-                    [ -n "$d" ] && echo "| \`$d\` | :warning: new |"
+                    [ -n "$d" ] && echo "| \`$d\` | :warning: would block |"
                 done
                 echo ""
             fi
