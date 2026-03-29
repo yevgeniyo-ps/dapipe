@@ -289,22 +289,11 @@ function RunDetail({ report: r, detail }: { report: Report; detail: any }) {
       .map((c: any) => c.domain)
   )] as string[];
 
-  // Direct IPs: only show IPs that are in the policy (allowed or blocked)
-  // We can't distinguish direct IPs from TLS infrastructure on the dashboard
-  // (the CI analyze script uses resolved_ips.txt file for that)
-  const policyIps = new Set([...allAllowed, ...allBlocked]);
-  const directIps = [...new Set(
-    conns.filter((c: any) => (!c.domain || c.domain === "") && c.ip && !resolvedIps.has(c.ip) && policyIps.has(c.ip))
-      .map((c: any) => c.ip)
-  )] as string[];
-
-  // Also include IPs from blocked events (these are definitely direct — hook blocked them)
-  const blockedDirectIps = [...new Set(
-    conns.filter((c: any) => c.event === "blocked" && (!c.domain || c.domain === "") && c.ip && !resolvedIps.has(c.ip))
-      .map((c: any) => c.ip)
-  )] as string[];
-
-  const allDirectIps = [...new Set([...directIps, ...blockedDirectIps])];
+  // Direct IPs: from connect/blocked events where domain is empty, minus resolved IPs
+  const allDirectIps = [...new Set(
+    conns.filter((c: any) => (!c.domain || c.domain === "") && c.ip && !resolvedIps.has(c.ip))
+      .map((c: any) => c.ip as string)
+  )];
 
   // Merge all targets
   const allTargets = [...domains, ...allDirectIps];
