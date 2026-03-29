@@ -66,24 +66,22 @@ jobs:
         env:
           SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          VERSION: ${{ steps.version.outputs.version }}
+          ARCH: ${{ matrix.arch }}
+          SHA: ${{ steps.hash.outputs.sha256 }}
+          SIZE: ${{ steps.hash.outputs.size }}
+          RELEASE_NOTES: ${{ steps.version.outputs.notes }}
         run: |
-          VERSION="${{ steps.version.outputs.version }}"
-          ARCH="${{ matrix.arch }}"
-          SHA="${{ steps.hash.outputs.sha256 }}"
-          SIZE="${{ steps.hash.outputs.size }}"
-
-          # Build JSON body safely using python to handle quotes in release notes
           python3 -c "
-          import json, sys
-          notes = ${{ steps.version.outputs.notes }}
+          import json, os
           body = json.dumps({
-            'version': '${VERSION}',
-            'arch': '${ARCH}',
-            'file_size': ${SIZE},
-            'sha256_hash': '${SHA}',
-            'storage_path': '${VERSION}/linux-${ARCH}/dapipe_hook.so',
+            'version': os.environ['VERSION'],
+            'arch': os.environ['ARCH'],
+            'file_size': int(os.environ['SIZE']),
+            'sha256_hash': os.environ['SHA'],
+            'storage_path': os.environ['VERSION'] + '/linux-' + os.environ['ARCH'] + '/dapipe_hook.so',
             'is_latest': False,
-            'release_notes': notes
+            'release_notes': os.environ.get('RELEASE_NOTES', '')
           })
           print(body)
           " > /tmp/body.json
