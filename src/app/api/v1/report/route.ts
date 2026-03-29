@@ -98,19 +98,33 @@ export async function POST(request: Request) {
 
   // Bulk insert connections
   if (connections.length > 0) {
-    const rows = connections.map((c) => ({
-      report_id: report.id,
-      ts: c.ts || new Date().toISOString(),
-      event: c.event || "",
-      domain: c.domain || "",
-      ip: c.ip || "",
-      port: c.port || 0,
-      pid: c.pid || 0,
-      ppid: c.ppid || 0,
-      process: c.process || "",
-    }));
+    const rows = connections.map((c) => {
+      // Convert numeric timestamp (epoch seconds) to ISO string
+      let ts: string;
+      if (typeof c.ts === "number") {
+        ts = new Date(c.ts * 1000).toISOString();
+      } else if (typeof c.ts === "string" && !isNaN(Number(c.ts))) {
+        ts = new Date(Number(c.ts) * 1000).toISOString();
+      } else {
+        ts = c.ts || new Date().toISOString();
+      }
+      return {
+        report_id: report.id,
+        ts,
+        event: c.event || "",
+        domain: c.domain || "",
+        ip: c.ip || "",
+        port: c.port || 0,
+        pid: c.pid || 0,
+        ppid: c.ppid || 0,
+        process: c.process || "",
+      };
+    });
 
-    await supabase.from("connections").insert(rows);
+    const { error: connError } = await supabase.from("connections").insert(rows);
+    if (connError) {
+      console.error("Failed to insert connections:", connError.message);
+    }
   }
 
   return NextResponse.json({
