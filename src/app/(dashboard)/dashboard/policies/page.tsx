@@ -5,9 +5,8 @@ import { useInterval } from "@/lib/use-interval";
 import { useOrgId } from "@/components/org-context";
 import { getPolicy, savePolicy, getBaseEndpoints } from "../actions";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { Loader2, Save, Plus, X, Lock } from "lucide-react";
+import { Loader2, Save, Plus, Trash2, Lock } from "lucide-react";
 
 export default function PoliciesPage() {
   const orgId = useOrgId();
@@ -17,9 +16,8 @@ export default function PoliciesPage() {
   const [customerAllowed, setCustomerAllowed] = useState<string[]>([]);
   const [customerBlocked, setCustomerBlocked] = useState<string[]>([]);
   const [blockedIps, setBlockedIps] = useState<string[]>([]);
-  const [newAllowed, setNewAllowed] = useState("");
-  const [newBlocked, setNewBlocked] = useState("");
-  const [newIp, setNewIp] = useState("");
+  const [activeTab, setActiveTab] = useState<"allowed" | "blocked">("allowed");
+  const [newEntry, setNewEntry] = useState("");
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
 
@@ -56,32 +54,42 @@ export default function PoliciesPage() {
     setSaving(false);
   };
 
-  const addDomain = (
-    value: string,
-    setter: React.Dispatch<React.SetStateAction<string>>,
-    list: string[],
-    listSetter: React.Dispatch<React.SetStateAction<string[]>>
-  ) => {
-    const domain = value.trim().toLowerCase();
-    if (!domain) return;
-    if (!list.includes(domain) && !baseAllowed.includes(domain) && !baseBlocked.includes(domain)) {
-      listSetter([...list, domain]);
+  const handleAdd = () => {
+    const value = newEntry.trim().toLowerCase();
+    if (!value) return;
+    if (activeTab === "allowed") {
+      if (!customerAllowed.includes(value) && !baseAllowed.includes(value)) {
+        setCustomerAllowed([...customerAllowed, value]);
+      }
+    } else {
+      // Detect IP vs domain
+      const isIp = /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(value);
+      if (isIp) {
+        if (!blockedIps.includes(value)) {
+          setBlockedIps([...blockedIps, value]);
+        }
+      } else {
+        if (!customerBlocked.includes(value) && !baseBlocked.includes(value)) {
+          setCustomerBlocked([...customerBlocked, value]);
+        }
+      }
     }
-    setter("");
+    setNewEntry("");
   };
 
-  const removeDomain = (
-    domain: string,
-    list: string[],
-    listSetter: React.Dispatch<React.SetStateAction<string[]>>
-  ) => {
-    listSetter(list.filter((d) => d !== domain));
+  const handleRemove = (value: string, type: "allowed" | "blocked-domain" | "blocked-ip") => {
+    if (type === "allowed") setCustomerAllowed(customerAllowed.filter((d) => d !== value));
+    else if (type === "blocked-domain") setCustomerBlocked(customerBlocked.filter((d) => d !== value));
+    else setBlockedIps(blockedIps.filter((ip) => ip !== value));
   };
 
   if (loading) return <div className="flex items-center justify-center py-20"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>;
 
+  const allowedTotal = baseAllowed.length + customerAllowed.length;
+  const blockedTotal = baseBlocked.length + customerBlocked.length + blockedIps.length;
+
   return (
-    <div className="space-y-6 max-w-3xl">
+    <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-[20px] font-semibold">Egress Rules</h1>
         <Button onClick={handleSave} disabled={saving} size="sm">
@@ -90,110 +98,142 @@ export default function PoliciesPage() {
         </Button>
       </div>
 
-      {/* Allowed domains */}
-      <div className="rounded-2xl border p-5">
-        <label className="text-[12px] font-semibold uppercase tracking-[0.5px] text-muted-foreground">Allowed domains</label>
-        <p className="text-[13px] text-muted-foreground mt-1 mb-3">Domains permitted in restrict mode. Base domains are managed globally.</p>
+      {/* Tab toggle */}
+      <div className="flex gap-1 rounded-lg bg-muted p-[3px] w-fit">
+        {([
+          { key: "allowed" as const, label: "Allowed", count: allowedTotal },
+          { key: "blocked" as const, label: "Blocked", count: blockedTotal },
+        ]).map((tab) => (
+          <button
+            key={tab.key}
+            onClick={() => setActiveTab(tab.key)}
+            className={`rounded-md px-3 py-1.5 text-[13px] font-medium transition-colors ${
+              activeTab === tab.key
+                ? "bg-background text-foreground shadow-sm"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            {tab.label}
+            <span className="ml-1.5 text-[11px] text-muted-foreground">({tab.count})</span>
+          </button>
+        ))}
+      </div>
 
-        <div className="space-y-1.5 mb-3">
-          {/* Base domains (greyed out, locked) */}
-          {baseAllowed.map((d) => (
-            <div key={`base-${d}`} className="flex items-center gap-2 rounded-lg bg-muted/50 px-3 py-1.5">
-              <Lock className="h-3 w-3 text-muted-foreground shrink-0" />
-              <span className="text-[13px] font-mono text-muted-foreground flex-1">{d}</span>
-              <Badge variant="secondary" className="text-[10px]">base</Badge>
-            </div>
-          ))}
-          {/* Customer domains (editable) */}
-          {customerAllowed.map((d) => (
-            <div key={`custom-${d}`} className="flex items-center gap-2 rounded-lg border px-3 py-1.5">
-              <span className="text-[13px] font-mono flex-1">{d}</span>
-              <button onClick={() => removeDomain(d, customerAllowed, setCustomerAllowed)} className="text-muted-foreground hover:text-destructive">
-                <X className="h-3.5 w-3.5" />
-              </button>
-            </div>
-          ))}
-        </div>
-
-        <div className="flex gap-2">
+      {/* Add form */}
+      <div className="rounded-2xl border p-5 space-y-4">
+        <h3 className="text-[14px] font-semibold">
+          Add {activeTab === "allowed" ? "allowed" : "blocked"} endpoint
+        </h3>
+        <p className="text-[13px] text-muted-foreground">
+          {activeTab === "allowed"
+            ? "Domains permitted in restrict mode. Enter one domain per entry."
+            : "Domains or IPs to always block. IPs are auto-detected (e.g. 1.2.3.4)."}
+        </p>
+        <div className="flex gap-3">
           <Input
-            placeholder="registry.npmjs.org"
-            value={newAllowed}
-            onChange={(e) => setNewAllowed(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && addDomain(newAllowed, setNewAllowed, customerAllowed, setCustomerAllowed)}
+            placeholder={activeTab === "allowed" ? "registry.npmjs.org" : "evil.com or 1.2.3.4"}
+            value={newEntry}
+            onChange={(e) => setNewEntry(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && handleAdd()}
             className="flex-1 font-mono text-[13px]"
           />
-          <Button size="sm" variant="secondary" onClick={() => addDomain(newAllowed, setNewAllowed, customerAllowed, setCustomerAllowed)}>
-            <Plus className="h-4 w-4" />
+          <Button onClick={handleAdd} size="sm">
+            <Plus className="mr-2 h-4 w-4" />
+            Add
           </Button>
         </div>
       </div>
 
-      {/* Blocked domains */}
-      <div className="rounded-2xl border p-5">
-        <label className="text-[12px] font-semibold uppercase tracking-[0.5px] text-muted-foreground">Blocked domains</label>
-        <p className="text-[13px] text-muted-foreground mt-1 mb-3">Always blocked regardless of mode. Threat intel domains are managed globally.</p>
-
-        <div className="space-y-1.5 mb-3">
-          {baseBlocked.map((d) => (
-            <div key={`base-${d}`} className="flex items-center gap-2 rounded-lg bg-destructive/10 px-3 py-1.5">
-              <Lock className="h-3 w-3 text-destructive/50 shrink-0" />
-              <span className="text-[13px] font-mono text-destructive/70 flex-1">{d}</span>
-              <Badge variant="destructive" className="text-[10px]">threat intel</Badge>
-            </div>
-          ))}
-          {customerBlocked.map((d) => (
-            <div key={`custom-${d}`} className="flex items-center gap-2 rounded-lg border border-destructive/30 px-3 py-1.5">
-              <span className="text-[13px] font-mono flex-1">{d}</span>
-              <button onClick={() => removeDomain(d, customerBlocked, setCustomerBlocked)} className="text-muted-foreground hover:text-destructive">
-                <X className="h-3.5 w-3.5" />
-              </button>
-            </div>
-          ))}
-        </div>
-
-        <div className="flex gap-2">
-          <Input
-            placeholder="evil.example.com"
-            value={newBlocked}
-            onChange={(e) => setNewBlocked(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && addDomain(newBlocked, setNewBlocked, customerBlocked, setCustomerBlocked)}
-            className="flex-1 font-mono text-[13px]"
-          />
-          <Button size="sm" variant="secondary" onClick={() => addDomain(newBlocked, setNewBlocked, customerBlocked, setCustomerBlocked)}>
-            <Plus className="h-4 w-4" />
-          </Button>
-        </div>
-      </div>
-
-      {/* Blocked IPs */}
-      <div className="rounded-2xl border p-5">
-        <label className="text-[12px] font-semibold uppercase tracking-[0.5px] text-muted-foreground">Blocked IPs</label>
-        <p className="text-[13px] text-muted-foreground mt-1 mb-3">Always blocked regardless of mode.</p>
-
-        <div className="space-y-1.5 mb-3">
-          {blockedIps.map((ip) => (
-            <div key={ip} className="flex items-center gap-2 rounded-lg border px-3 py-1.5">
-              <span className="text-[13px] font-mono flex-1">{ip}</span>
-              <button onClick={() => removeDomain(ip, blockedIps, setBlockedIps)} className="text-muted-foreground hover:text-destructive">
-                <X className="h-3.5 w-3.5" />
-              </button>
-            </div>
-          ))}
-        </div>
-
-        <div className="flex gap-2">
-          <Input
-            placeholder="1.2.3.4"
-            value={newIp}
-            onChange={(e) => setNewIp(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && addDomain(newIp, setNewIp, blockedIps, setBlockedIps)}
-            className="flex-1 font-mono text-[13px]"
-          />
-          <Button size="sm" variant="secondary" onClick={() => addDomain(newIp, setNewIp, blockedIps, setBlockedIps)}>
-            <Plus className="h-4 w-4" />
-          </Button>
-        </div>
+      {/* Table */}
+      <div className="rounded-2xl border overflow-hidden">
+        {activeTab === "allowed" ? (
+          allowedTotal === 0 ? (
+            <p className="text-[13px] text-muted-foreground py-12 text-center">No allowed endpoints.</p>
+          ) : (
+            <table className="w-full border-collapse">
+              <thead>
+                <tr className="border-b">
+                  <th className="px-4 py-3 text-left text-[12px] font-semibold text-muted-foreground uppercase tracking-[0.5px]">Domain</th>
+                  <th className="px-4 py-3 text-left text-[12px] font-semibold text-muted-foreground uppercase tracking-[0.5px]">Source</th>
+                  <th className="px-4 py-3 text-right text-[12px] font-semibold text-muted-foreground uppercase tracking-[0.5px]">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {baseAllowed.map((d) => (
+                  <tr key={`base-${d}`} className="border-b last:border-0 bg-muted/30">
+                    <td className="px-4 py-3 text-[13px] font-mono text-muted-foreground flex items-center gap-2">
+                      <Lock className="h-3 w-3 text-muted-foreground shrink-0 inline" /> {d}
+                    </td>
+                    <td className="px-4 py-3 text-[12px] text-muted-foreground">Global base</td>
+                    <td className="px-4 py-3 text-right text-[12px] text-muted-foreground">--</td>
+                  </tr>
+                ))}
+                {customerAllowed.map((d) => (
+                  <tr key={`custom-${d}`} className="border-b last:border-0">
+                    <td className="px-4 py-3 text-[13px] font-mono font-medium">{d}</td>
+                    <td className="px-4 py-3 text-[12px] text-muted-foreground">Custom</td>
+                    <td className="px-4 py-3 text-right">
+                      <Button variant="destructive" size="sm" onClick={() => handleRemove(d, "allowed")}>
+                        <Trash2 className="mr-1 h-3 w-3" /> Remove
+                      </Button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )
+        ) : (
+          blockedTotal === 0 ? (
+            <p className="text-[13px] text-muted-foreground py-12 text-center">No blocked endpoints.</p>
+          ) : (
+            <table className="w-full border-collapse">
+              <thead>
+                <tr className="border-b">
+                  <th className="px-4 py-3 text-left text-[12px] font-semibold text-muted-foreground uppercase tracking-[0.5px]">Target</th>
+                  <th className="px-4 py-3 text-left text-[12px] font-semibold text-muted-foreground uppercase tracking-[0.5px]">Type</th>
+                  <th className="px-4 py-3 text-left text-[12px] font-semibold text-muted-foreground uppercase tracking-[0.5px]">Source</th>
+                  <th className="px-4 py-3 text-right text-[12px] font-semibold text-muted-foreground uppercase tracking-[0.5px]">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {baseBlocked.map((d) => (
+                  <tr key={`base-${d}`} className="border-b last:border-0 bg-destructive/5">
+                    <td className="px-4 py-3 text-[13px] font-mono text-muted-foreground">
+                      <Lock className="h-3 w-3 text-destructive/50 shrink-0 inline mr-2" />{d}
+                    </td>
+                    <td className="px-4 py-3 text-[12px] text-muted-foreground">Domain</td>
+                    <td className="px-4 py-3 text-[12px] text-muted-foreground">Threat intel</td>
+                    <td className="px-4 py-3 text-right text-[12px] text-muted-foreground">--</td>
+                  </tr>
+                ))}
+                {customerBlocked.map((d) => (
+                  <tr key={`custom-${d}`} className="border-b last:border-0">
+                    <td className="px-4 py-3 text-[13px] font-mono font-medium">{d}</td>
+                    <td className="px-4 py-3 text-[12px] text-muted-foreground">Domain</td>
+                    <td className="px-4 py-3 text-[12px] text-muted-foreground">Custom</td>
+                    <td className="px-4 py-3 text-right">
+                      <Button variant="destructive" size="sm" onClick={() => handleRemove(d, "blocked-domain")}>
+                        <Trash2 className="mr-1 h-3 w-3" /> Remove
+                      </Button>
+                    </td>
+                  </tr>
+                ))}
+                {blockedIps.map((ip) => (
+                  <tr key={`ip-${ip}`} className="border-b last:border-0">
+                    <td className="px-4 py-3 text-[13px] font-mono font-medium">{ip}</td>
+                    <td className="px-4 py-3 text-[12px] text-muted-foreground">IP</td>
+                    <td className="px-4 py-3 text-[12px] text-muted-foreground">Custom</td>
+                    <td className="px-4 py-3 text-right">
+                      <Button variant="destructive" size="sm" onClick={() => handleRemove(ip, "blocked-ip")}>
+                        <Trash2 className="mr-1 h-3 w-3" /> Remove
+                      </Button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )
+        )}
       </div>
     </div>
   );
