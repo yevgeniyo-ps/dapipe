@@ -34,10 +34,12 @@ if [ -n "$POLICY" ]; then
     POLICY_BLOCKED_IPS=$(echo "$POLICY" | sed -n 's/.*"blocked_ips":\[\([^]]*\)\].*/\1/p' | tr -d '"' | tr ',' '\n' | sed '/^$/d' || true)
 fi
 
-# Unique observed domains
+# Unique observed domains (from "domain" field)
 ALL_DOMAINS=$(echo "$FILTERED" | sed -n 's/.*"domain":"\([^"]*\)".*/\1/p' | sort -u | grep -v '^$' || true)
-BLOCKED_DOMAINS=$(echo "$FILTERED" | grep '"blocked"' | sed -n 's/.*"domain":"\([^"]*\)".*/\1/p' | sort -u | grep -v '^$' || true)
-BLOCKED_IPS=$(echo "$FILTERED" | grep '"blocked"' | sed -n 's/.*"ip":"\([^"]*\)".*/\1/p' | sort -u | grep -v '^$' || true)
+# Blocked domains — only real domains, not IPs logged as domain
+BLOCKED_DOMAINS=$(echo "$FILTERED" | grep '"blocked"' | sed -n 's/.*"domain":"\([^"]*\)".*/\1/p' | sort -u | grep -vE '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$' | grep -v '^$' || true)
+# Blocked IPs — only direct IPs (domain field is an IP = direct connection)
+BLOCKED_IPS=$(echo "$FILTERED" | grep '"blocked"' | sed -n 's/.*"domain":"\([0-9][0-9.]*\)".*/\1/p' | sort -u | grep -v '^$' || true)
 
 # Split ALL_DOMAINS into real domains vs direct IPs (an IP looks like N.N.N.N)
 REAL_DOMAINS=""
@@ -153,7 +155,7 @@ if [ "$MODE" = "restrict" ]; then
         [ -n "$d" ] && echo "::error::DaPipe: blocked connection to $d"
     done
     [ -n "$BLOCKED_IPS" ] && echo "$BLOCKED_IPS" | while IFS= read -r ip; do
-        [ -n "$ip" ] && echo "::error::DaPipe: blocked connection to IP $ip"
+        [ -n "$ip" ] && echo "::error::DaPipe: blocked IP $ip"
     done
 else
     [ -n "$NEW_DOMAINS" ] && echo "$NEW_DOMAINS" | while IFS= read -r d; do
