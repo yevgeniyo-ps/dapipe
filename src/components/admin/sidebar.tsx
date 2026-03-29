@@ -26,7 +26,7 @@ const navigation = [
   { name: "Overview", href: "/admin", icon: LayoutDashboard },
   { name: "Binaries", href: "/admin/binaries", icon: Package },
   { name: "Organizations", href: "/admin/orgs", icon: Building2 },
-  { name: "Threat Intel", href: "/admin/endpoints", icon: ShieldAlert },
+  { name: "Network Rules", href: "/admin/endpoints", icon: ShieldAlert },
   { name: "GitHub App", href: "/admin/github-app", icon: Github },
   { name: "Admins", href: "/admin/admins", icon: UserCog },
 ];
