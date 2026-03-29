@@ -39,8 +39,7 @@ ALL_DOMAINS=$(echo "$FILTERED" | sed -n 's/.*"domain":"\([^"]*\)".*/\1/p' | sort
 BLOCKED_DOMAINS=$(echo "$FILTERED" | grep '"blocked"' | sed -n 's/.*"domain":"\([^"]*\)".*/\1/p' | sort -u | grep -v '^$' || true)
 BLOCKED_IPS=$(echo "$FILTERED" | grep '"blocked"' | sed -n 's/.*"ip":"\([^"]*\)".*/\1/p' | sort -u | grep -v '^$' || true)
 
-# Direct IP connections only (where domain is empty — not resolved IPs of domains)
-DIRECT_IPS=$(echo "$FILTERED" | grep '"domain":""\|"domain": ""' | sed -n 's/.*"ip":"\([^"]*\)".*/\1/p' | sort -u | grep -v '^$' || true)
+# Skip resolved IPs entirely — only report domains in the summary
 
 # Categorize domains: known-allowed, would-be-blocked, new (unknown)
 KNOWN_ALLOWED=""
@@ -61,22 +60,9 @@ if [ -n "$ALL_DOMAINS" ]; then
     done <<< "$ALL_DOMAINS"
 fi
 
-# Direct IPs: categorize
-if [ -n "$DIRECT_IPS" ]; then
-    while IFS= read -r ip; do
-        [ -z "$ip" ] && continue
-        if [ -n "$POLICY_BLOCKED_IPS" ] && echo "$POLICY_BLOCKED_IPS" | grep -qxF "$ip"; then
-            WOULD_BLOCK="${WOULD_BLOCK}${ip}"$'\n'
-        else
-            NEW_IPS="${NEW_IPS}${ip}"$'\n'
-        fi
-    done <<< "$DIRECT_IPS"
-fi
-
 KNOWN_ALLOWED=$(echo "$KNOWN_ALLOWED" | sed '/^$/d' || true)
 WOULD_BLOCK=$(echo "$WOULD_BLOCK" | sed '/^$/d' || true)
 NEW_DOMAINS=$(echo "$NEW_DOMAINS" | sed '/^$/d' || true)
-NEW_IPS=$(echo "$NEW_IPS" | sed '/^$/d' || true)
 
 KNOWN_ALLOWED_COUNT=0
 [ -n "$KNOWN_ALLOWED" ] && KNOWN_ALLOWED_COUNT=$(echo "$KNOWN_ALLOWED" | wc -l | tr -d ' ')
@@ -84,8 +70,6 @@ WOULD_BLOCK_COUNT=0
 [ -n "$WOULD_BLOCK" ] && WOULD_BLOCK_COUNT=$(echo "$WOULD_BLOCK" | wc -l | tr -d ' ')
 NEW_DOMAIN_COUNT=0
 [ -n "$NEW_DOMAINS" ] && NEW_DOMAIN_COUNT=$(echo "$NEW_DOMAINS" | wc -l | tr -d ' ')
-NEW_IP_COUNT=0
-[ -n "$NEW_IPS" ] && NEW_IP_COUNT=$(echo "$NEW_IPS" | wc -l | tr -d ' ')
 BLOCKED_DOMAIN_COUNT=0
 [ -n "$BLOCKED_DOMAINS" ] && BLOCKED_DOMAIN_COUNT=$(echo "$BLOCKED_DOMAINS" | wc -l | tr -d ' ')
 BLOCKED_IP_COUNT=0
@@ -129,9 +113,6 @@ else
     [ -n "$NEW_DOMAINS" ] && echo "$NEW_DOMAINS" | while IFS= read -r d; do
         [ -n "$d" ] && echo "::warning::DaPipe: new observed domain $d"
     done
-    [ -n "$NEW_IPS" ] && echo "$NEW_IPS" | while IFS= read -r ip; do
-        [ -n "$ip" ] && echo "::warning::DaPipe: new observed IP $ip"
-    done
 fi
 
 # Step summary
@@ -150,7 +131,6 @@ if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
         else
             [ "$WOULD_BLOCK_COUNT" -gt 0 ] && echo "| Would be blocked in restrict | $WOULD_BLOCK_COUNT |"
             [ "$NEW_DOMAIN_COUNT" -gt 0 ] && echo "| New observed domains | $NEW_DOMAIN_COUNT |"
-            [ "$NEW_IP_COUNT" -gt 0 ] && echo "| New observed IPs | $NEW_IP_COUNT |"
         fi
         [ -n "$DURATION" ] && echo "| Pipeline duration | ${DURATION}s |"
         echo ""
@@ -195,16 +175,13 @@ if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
                 echo ""
             fi
             # New / unknown
-            if [ "$NEW_DOMAIN_COUNT" -gt 0 ] || [ "$NEW_IP_COUNT" -gt 0 ]; then
+            if [ "$NEW_DOMAIN_COUNT" -gt 0 ]; then
                 echo "### New (not in egress rules)"
                 echo ""
-                echo "| Target | Type | Status |"
-                echo "|--------|------|--------|"
-                [ -n "$NEW_DOMAINS" ] && echo "$NEW_DOMAINS" | while IFS= read -r d; do
-                    [ -n "$d" ] && echo "| \`$d\` | domain | :warning: new |"
-                done
-                [ -n "$NEW_IPS" ] && echo "$NEW_IPS" | while IFS= read -r ip; do
-                    [ -n "$ip" ] && echo "| \`$ip\` | IP | :warning: new |"
+                echo "| Domain | Status |"
+                echo "|--------|--------|"
+                echo "$NEW_DOMAINS" | while IFS= read -r d; do
+                    [ -n "$d" ] && echo "| \`$d\` | :warning: new |"
                 done
                 echo ""
             fi
@@ -218,4 +195,4 @@ if [ "$MODE" = "restrict" ] && [ "$TOTAL_BLOCKED" -gt 0 ]; then
     exit 1
 fi
 
-echo "DaPipe: $KNOWN_ALLOWED_COUNT allowed, $NEW_DOMAIN_COUNT new domain(s), $NEW_IP_COUNT new IP(s)."
+echo "DaPipe: $KNOWN_ALLOWED_COUNT allowed, $NEW_DOMAIN_COUNT new domain(s)."
