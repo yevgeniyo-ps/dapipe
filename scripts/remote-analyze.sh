@@ -166,35 +166,18 @@ if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
         [ "$N_COUNT" -gt 0 ] && echo "| $L_NEW | $N_COUNT |"
         echo ""
 
-        if [ -n "$ALLOWED" ]; then
-            echo "### Allowed"
-            echo "| Target | Status |"
-            echo "|--------|--------|"
-            echo "$ALLOWED" | while IFS= read -r t; do
-                [ -n "$t" ] && echo "| \`$t\` | :white_check_mark: allowed |"
-            done
-            echo ""
-        fi
-
-        if [ -n "$EXISTING" ]; then
-            echo "### $L_EXIST"
-            echo "| Target | Status |"
-            echo "|--------|--------|"
-            echo "$EXISTING" | while IFS= read -r t; do
-                [ -n "$t" ] && echo "| \`$t\` | :no_entry: |"
-            done
-            echo ""
-        fi
-
-        if [ -n "$NEW" ]; then
-            echo "### $L_NEW"
-            echo "| Target | Status |"
-            echo "|--------|--------|"
-            echo "$NEW" | while IFS= read -r t; do
-                [ -n "$t" ] && echo "| \`$t\` | :warning: |"
-            done
-            echo ""
-        fi
+        echo "| Target | Status |"
+        echo "|--------|--------|"
+        [ -n "$ALLOWED" ] && echo "$ALLOWED" | while IFS= read -r t; do
+            [ -n "$t" ] && echo "| \`$t\` | :white_check_mark: allowed |"
+        done
+        [ -n "$EXISTING" ] && echo "$EXISTING" | while IFS= read -r t; do
+            [ -n "$t" ] && echo "| \`$t\` | :no_entry: $L_EXIST |"
+        done
+        [ -n "$NEW" ] && echo "$NEW" | while IFS= read -r t; do
+            [ -n "$t" ] && echo "| \`$t\` | :warning: $L_NEW |"
+        done
+        echo ""
     } >> "$GITHUB_STEP_SUMMARY"
 fi
 
