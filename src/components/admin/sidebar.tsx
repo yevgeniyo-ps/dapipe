@@ -76,14 +76,22 @@ export function AdminSidebar({ user }: AdminSidebarProps) {
         </svg>
       </button>
 
-      {/* Logo */}
-      <div className={cn("flex h-[72px] items-center border-b transition-all duration-200", collapsed ? "justify-center px-0" : "px-5")}>
+      {/* Admin banner */}
+      <div className={cn("flex items-center justify-center border-b border-amber-500/20 bg-amber-500/10 transition-all duration-200", collapsed ? "py-2" : "py-1.5")}>
         {collapsed ? (
-          <span className="text-[28px] font-bold select-none">d<span className="text-[#8e8e93]">.</span></span>
+          <span className="text-[10px] font-semibold text-amber-400 uppercase">BO</span>
         ) : (
-          <span className="font-bold tracking-tight select-none text-[28px]">
+          <span className="text-[11px] font-medium text-amber-400 tracking-wide uppercase">Admin Backoffice</span>
+        )}
+      </div>
+
+      {/* Logo */}
+      <div className={cn("flex h-[56px] items-center border-b transition-all duration-200", collapsed ? "justify-center px-0" : "px-5")}>
+        {collapsed ? (
+          <span className="text-[24px] font-bold select-none">d<span className="text-[#8e8e93]">.</span></span>
+        ) : (
+          <span className="font-bold tracking-tight select-none text-[24px]">
             dapipe<span className="text-[#8e8e93]">.</span>
-            <span className="text-[13px] font-medium text-muted-foreground ml-1">admin</span>
           </span>
         )}
       </div>

@@ -37,9 +37,6 @@ export default async function AdminLayout({
         }}
       />
       <DashboardShell>
-        <div className="sticky top-0 z-40 flex items-center justify-center gap-2 border-b border-amber-500/20 bg-amber-500/10 px-4 py-1.5 text-[11px] font-medium text-amber-400 tracking-wide uppercase">
-          Admin Backoffice
-        </div>
         <main className="px-6 py-6">{children}</main>
       </DashboardShell>
     </SidebarProvider>
