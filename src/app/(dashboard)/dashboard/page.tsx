@@ -195,6 +195,10 @@ export default function DashboardPage() {
                             <span className="text-[12px] font-mono text-muted-foreground">#{runId}</span>
                             <span className="text-[11px] text-muted-foreground">{timeAgo(firstJob.created_at)}</span>
                             <div className="flex-1" />
+                            <Badge variant="secondary" className={`text-[10px] ${firstJob.mode === "restrict" ? "bg-amber-500/15 text-amber-400" : ""}`}>
+                              {firstJob.mode === "restrict" ? <Shield className="h-2.5 w-2.5 mr-0.5" /> : <Eye className="h-2.5 w-2.5 mr-0.5" />}
+                              {firstJob.mode}
+                            </Badge>
                             <span className="text-[11px] text-muted-foreground">{jobs.length} job{jobs.length !== 1 ? "s" : ""}</span>
                             {runBlocked > 0 && <Badge variant="destructive" className="text-[10px]">{runBlocked} blocked</Badge>}
                             {runBlocked === 0 && jobs.some((j) => j.status === "warning") && (
