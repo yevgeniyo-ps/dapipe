@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
+import { useInterval } from "@/lib/use-interval";
 import {
   Building2,
   GitFork,
@@ -25,17 +26,17 @@ export default function AdminOverviewPage() {
   const [stats, setStats] = useState<AdminStats | null>(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    async function load() {
-      try {
-        const data = await getAdminStats();
-        setStats(data as AdminStats);
-      } finally {
-        setLoading(false);
-      }
+  const load = useCallback(async () => {
+    try {
+      const data = await getAdminStats();
+      setStats(data as AdminStats);
+    } finally {
+      setLoading(false);
     }
-    load();
   }, []);
+
+  useEffect(() => { load(); }, [load]);
+  useInterval(load, 10000);
 
   if (loading)
     return (

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
+import { useInterval } from "@/lib/use-interval";
 import { useOrgId } from "@/components/org-context";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -94,9 +95,8 @@ export default function DeployPage() {
     }
   }, [orgId]);
 
-  useEffect(() => {
-    load();
-  }, [load]);
+  useEffect(() => { load(); }, [load]);
+  useInterval(load, 5000);
 
   const toggleSelect = (id: string) => {
     setSelectedIds((prev) => {

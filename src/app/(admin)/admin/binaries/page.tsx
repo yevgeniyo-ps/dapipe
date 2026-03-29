@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
+import { useInterval } from "@/lib/use-interval";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -41,18 +42,17 @@ export default function BinariesPage() {
   const [file, setFile] = useState<File | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    loadBinaries();
-  }, []);
-
-  async function loadBinaries() {
+  const loadBinaries = useCallback(async () => {
     try {
       const result = await listBinaries();
       setBinaries((result.binaries || []) as Binary[]);
     } finally {
       setLoading(false);
     }
-  }
+  }, []);
+
+  useEffect(() => { loadBinaries(); }, [loadBinaries]);
+  useInterval(loadBinaries, 5000);
 
   const handleUpload = async () => {
     if (!version.trim() || !file) {
