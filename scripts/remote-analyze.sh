@@ -85,8 +85,12 @@ fi
 # Only show IPs that are in the blocked IPs policy or were explicitly curled
 # All other IPs are resolved addresses / secondary connections — noise
 if [ -n "$OBSERVED_IPS" ]; then
-    # Get IPs that the user explicitly curled (appeared in domain field as an IP)
-    CURLED_IPS=$(echo "$FILTERED" | sed -n 's/.*"event":"dns".*"domain":"\([0-9][0-9.]*\)".*/\1/p' | sort -u | grep -v '^$' || true)
+    # Get IPs that the user explicitly curled:
+    # 1. Appeared as IP in the "domain" field (getaddrinfo was called with an IP)
+    # 2. Appeared in the "ip" field with domain="" (direct connect, no getaddrinfo)
+    CURLED_FROM_DOMAIN=$(echo "$FILTERED" | sed -n 's/.*"domain":"\([0-9][0-9.]*[0-9]\)".*/\1/p' | sort -u | grep -v '^$' || true)
+    CURLED_FROM_CONNECT=$(echo "$FILTERED" | grep '"domain":""' | sed -n 's/.*"ip":"\([^"]*\)".*/\1/p' | sort -u | grep -v '^$' || true)
+    CURLED_IPS=$(printf '%s\n%s' "$CURLED_FROM_DOMAIN" "$CURLED_FROM_CONNECT" | sort -u | grep -v '^$' || true)
 
     while IFS= read -r ip; do
         [ -z "$ip" ] && continue
