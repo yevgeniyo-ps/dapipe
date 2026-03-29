@@ -40,7 +40,7 @@ BLOCKED_DOMAINS=$(echo "$FILTERED" | grep '"blocked"' | sed -n 's/.*"domain":"\(
 BLOCKED_IPS=$(echo "$FILTERED" | grep '"blocked"' | sed -n 's/.*"ip":"\([^"]*\)".*/\1/p' | sort -u | grep -v '^$' || true)
 
 # Direct IP connections only (where domain is empty — not resolved IPs of domains)
-DIRECT_IPS=$(echo "$FILTERED" | grep '"domain":""' | sed -n 's/.*"ip":"\([^"]*\)".*/\1/p' | sort -u | grep -v '^$' || true)
+DIRECT_IPS=$(echo "$FILTERED" | grep '"domain":""\|"domain": ""' | sed -n 's/.*"ip":"\([^"]*\)".*/\1/p' | sort -u | grep -v '^$' || true)
 
 # Categorize domains: known-allowed, would-be-blocked, new (unknown)
 KNOWN_ALLOWED=""
