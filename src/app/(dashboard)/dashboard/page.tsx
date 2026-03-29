@@ -327,7 +327,9 @@ function RunDetail({ report: r, detail }: { report: Report; detail: any }) {
         )}
       </div>
 
-      {targets.length > 0 ? (
+      {!loaded ? (
+        <div className="flex items-center justify-center py-4"><Loader2 className="h-4 w-4 animate-spin text-muted-foreground" /></div>
+      ) : targets.length > 0 ? (
         <table className="w-full border-collapse rounded-lg border overflow-hidden">
           <thead>
             <tr className="border-b bg-muted/30">
