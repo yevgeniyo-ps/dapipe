@@ -290,10 +290,10 @@ function RunDetail({ report: r, detail }: { report: Report; detail: any }) {
   )] as string[];
 
   // Direct IPs: from connect/blocked events where domain is empty, minus resolved IPs
-  const allDirectIps = [...new Set(
+  const allDirectIps = Array.from(new Set(
     conns.filter((c: any) => (!c.domain || c.domain === "") && c.ip && !resolvedIps.has(c.ip))
-      .map((c: any) => c.ip as string)
-  )];
+      .map((c: any) => c.ip)
+  )) as string[];
 
   // Merge all targets
   const allTargets: string[] = [...domains, ...allDirectIps];
