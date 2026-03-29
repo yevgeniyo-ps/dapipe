@@ -33,10 +33,16 @@ jobs:
           echo "sha256=$SHA" >> "$GITHUB_OUTPUT"
           echo "size=$SIZE" >> "$GITHUB_OUTPUT"
 
-      - name: Get version from release tag
+      - name: Get version and release notes
         id: version
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           echo "version=$GITHUB_REF_NAME" >> "$GITHUB_OUTPUT"
+          NOTES=$(gh release view "$GITHUB_REF_NAME" --json body -q .body 2>/dev/null || true)
+          # Escape for JSON
+          NOTES_ESCAPED=$(echo "$NOTES" | python3 -c "import sys,json; print(json.dumps(sys.stdin.read().strip()))" 2>/dev/null || echo '""')
+          echo "notes=$NOTES_ESCAPED" >> "$GITHUB_OUTPUT"
 
       - name: Upload to Supabase Storage
         env:
@@ -66,12 +72,14 @@ jobs:
           SHA="${{ steps.hash.outputs.sha256 }}"
           SIZE="${{ steps.hash.outputs.size }}"
 
+          NOTES='${{ steps.version.outputs.notes }}'
+
           curl -f -X POST \
             "${SUPABASE_URL}/rest/v1/agent_binaries" \
             -H "Authorization: Bearer ${SUPABASE_KEY}" \
             -H "apikey: ${SUPABASE_KEY}" \
             -H "Content-Type: application/json" \
             -H "Prefer: resolution=merge-duplicates" \
-            -d "{\"version\":\"${VERSION}\",\"arch\":\"${ARCH}\",\"file_size\":${SIZE},\"sha256_hash\":\"${SHA}\",\"storage_path\":\"${VERSION}/linux-${ARCH}/dapipe_hook.so\",\"is_latest\":false}"
+            -d "{\"version\":\"${VERSION}\",\"arch\":\"${ARCH}\",\"file_size\":${SIZE},\"sha256_hash\":\"${SHA}\",\"storage_path\":\"${VERSION}/linux-${ARCH}/dapipe_hook.so\",\"is_latest\":false,\"release_notes\":${NOTES}}"
 
           echo "Upserted agent_binaries record for ${VERSION}/${ARCH}"

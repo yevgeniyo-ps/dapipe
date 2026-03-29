@@ -27,6 +27,7 @@ interface Binary {
   sha256_hash: string | null;
   storage_path: string;
   is_latest: boolean;
+  release_notes: string;
   download_count: number;
   created_at: string;
 }
@@ -185,7 +186,7 @@ export default function BinariesPage() {
                   Size
                 </th>
                 <th className="px-4 py-3 text-left text-[12px] font-semibold text-muted-foreground uppercase tracking-[0.5px]">
-                  SHA256
+                  Release Notes
                 </th>
                 <th className="px-4 py-3 text-left text-[12px] font-semibold text-muted-foreground uppercase tracking-[0.5px]">
                   Status
@@ -213,8 +214,8 @@ export default function BinariesPage() {
                   <td className="px-4 py-3 text-[13px] text-muted-foreground">
                     {formatBytes(b.file_size)}
                   </td>
-                  <td className="px-4 py-3 text-[12px] font-mono text-muted-foreground">
-                    {b.sha256_hash ? b.sha256_hash.slice(0, 16) + "..." : "--"}
+                  <td className="px-4 py-3 text-[12px] text-muted-foreground max-w-[250px] truncate" title={b.release_notes}>
+                    {b.release_notes || "--"}
                   </td>
                   <td className="px-4 py-3">
                     {b.is_latest ? (
