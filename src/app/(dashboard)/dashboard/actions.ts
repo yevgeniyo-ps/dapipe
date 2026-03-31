@@ -425,7 +425,15 @@ export async function inviteMember(orgId: string, email: string, role: OrgRole) 
     }
   }
 
-  // Insert invitation (RLS enforces owner/admin)
+  // Remove old accepted/expired invitations for this email so re-invites work
+  await service
+    .from("org_invitations")
+    .delete()
+    .eq("org_id", orgId)
+    .eq("email", email.toLowerCase().trim())
+    .or("accepted_at.not.is.null,expires_at.lt." + new Date().toISOString());
+
+  // Insert invitation (RLS enforces admin/power)
   const { data: invitation, error } = await supabase
     .from("org_invitations")
     .insert({
@@ -438,7 +446,7 @@ export async function inviteMember(orgId: string, email: string, role: OrgRole) 
     .single();
 
   if (error) {
-    if (error.code === "23505") return { error: "This email has already been invited" };
+    if (error.code === "23505") return { error: "This email already has a pending invitation" };
     return { error: error.message };
   }
 
