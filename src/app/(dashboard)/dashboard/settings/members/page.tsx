@@ -30,7 +30,13 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
-import { Loader2, UserPlus, X, Clock, Mail } from "lucide-react";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { Loader2, UserPlus, X, Clock, Mail, HelpCircle } from "lucide-react";
 import type { OrgRole } from "@/lib/types/database";
 
 interface Member {
@@ -231,7 +237,19 @@ export default function MembersPage() {
                   User
                 </th>
                 <th className="px-4 py-3 text-left text-[12px] font-semibold text-muted-foreground uppercase tracking-[0.5px]">
-                  Role
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger className="inline-flex items-center gap-1 cursor-help">
+                        Role
+                        <HelpCircle className="h-3 w-3" />
+                      </TooltipTrigger>
+                      <TooltipContent side="bottom" align="start" className="max-w-[240px] text-left leading-relaxed">
+                        <strong>Admin</strong> — full access, manage members and settings<br />
+                        <strong>Power</strong> — manage repos, policies, keys, deploy<br />
+                        <strong>Read-only</strong> — view dashboard and reports
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
                 </th>
                 <th className="px-4 py-3 text-left text-[12px] font-semibold text-muted-foreground uppercase tracking-[0.5px]">
                   Joined
@@ -327,11 +345,16 @@ export default function MembersPage() {
                 </SelectTrigger>
                 <SelectContent>
                   {permissions.canManageMembers && (
-                    <SelectItem value="power">Power -- manage repos, policies, keys</SelectItem>
+                    <SelectItem value="power">Power</SelectItem>
                   )}
-                  <SelectItem value="readonly">Read-only -- view only</SelectItem>
+                  <SelectItem value="readonly">Read-only</SelectItem>
                 </SelectContent>
               </Select>
+              <p className="text-[11px] text-muted-foreground mt-1.5">
+                {inviteRole === "power"
+                  ? "Can manage repos, policies, API keys, and deploy."
+                  : "Can view the dashboard and reports. Cannot modify anything."}
+              </p>
             </div>
           </div>
           <DialogFooter>
