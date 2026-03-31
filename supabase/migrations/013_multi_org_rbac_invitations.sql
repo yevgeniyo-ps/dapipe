@@ -1,6 +1,8 @@
 -- 013_multi_org_rbac_invitations.sql
 -- Multi-org RBAC enforcement, org invitations, role-aware RLS policies
 
+CREATE EXTENSION IF NOT EXISTS pgcrypto WITH SCHEMA extensions;
+
 -- ══════════════════════════════════════════════════════════════
 -- 1. New helper functions (keep existing user_in_org for read checks)
 -- ══════════════════════════════════════════════════════════════
@@ -33,7 +35,7 @@ CREATE TABLE org_invitations (
   org_id uuid NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
   email text NOT NULL,
   role text NOT NULL DEFAULT 'member' CHECK (role IN ('owner','admin','member')),
-  token text NOT NULL UNIQUE DEFAULT encode(gen_random_bytes(32), 'hex'),
+  token text NOT NULL UNIQUE DEFAULT encode(extensions.gen_random_bytes(32), 'hex'),
   invited_by uuid REFERENCES auth.users(id) ON DELETE SET NULL,
   accepted_at timestamptz,
   expires_at timestamptz NOT NULL DEFAULT now() + interval '7 days',
