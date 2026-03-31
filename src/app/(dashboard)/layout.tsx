@@ -20,16 +20,16 @@ export default async function DashboardLayout({
 
   if (!user) redirect("/login");
 
-  const [{ data: approved }, { data: allMemberships }] = await Promise.all([
-    supabase.rpc("is_approved"),
-    supabase
-      .from("org_members")
-      .select("org_id, role, organizations(name, slug)")
-      .eq("user_id", user.id)
-      .order("created_at", { ascending: true }),
-  ]);
-
+  const { data: approved } = await supabase.rpc("is_approved");
   if (!approved) redirect("/waitlist");
+
+  // Use service client for membership query to avoid RLS join issues
+  const service = createServiceClient();
+  const { data: allMemberships } = await service
+    .from("org_members")
+    .select("org_id, role, organizations(name, slug)")
+    .eq("user_id", user.id)
+    .order("created_at", { ascending: true });
 
   // Build memberships list
   const memberships: OrgMembership[] = (allMemberships || []).map(
@@ -64,8 +64,6 @@ export default async function DashboardLayout({
 
   // Auto-create org for new users with no memberships
   if (!orgId) {
-    const service = createServiceClient();
-
     const name =
       user.user_metadata?.full_name ||
       user.email?.split("@")[0] ||
