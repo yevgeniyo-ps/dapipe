@@ -7,6 +7,7 @@ import {
   getMembers,
   getInvitations,
   inviteMember,
+  resendInvitation,
   cancelInvitation,
   changeMemberRole,
   removeMember,
@@ -96,6 +97,14 @@ export default function MembersPage() {
     }
   };
 
+  const handleResend = async (invId: string) => {
+    if (!orgId) return;
+    setError("");
+    const result = await resendInvitation(orgId, invId);
+    if (result?.error) setError(result.error);
+    else load();
+  };
+
   const handleCancel = async (invId: string) => {
     if (!orgId) return;
     await cancelInvitation(orgId, invId);
@@ -175,12 +184,20 @@ export default function MembersPage() {
                       Expires {new Date(inv.expires_at).toLocaleDateString()}
                     </td>
                     <td className="px-4 py-3 text-right">
-                      <button
-                        onClick={() => handleCancel(inv.id)}
-                        className="text-[12px] text-muted-foreground hover:text-red-400 transition-colors cursor-pointer"
-                      >
-                        Cancel
-                      </button>
+                      <div className="flex items-center justify-end gap-3">
+                        <button
+                          onClick={() => handleResend(inv.id)}
+                          className="text-[12px] text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+                        >
+                          Resend
+                        </button>
+                        <button
+                          onClick={() => handleCancel(inv.id)}
+                          className="text-[12px] text-muted-foreground hover:text-red-400 transition-colors cursor-pointer"
+                        >
+                          Cancel
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}

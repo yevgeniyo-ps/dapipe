@@ -27,7 +27,14 @@ export default async function InvitePage({
     redirect("/dashboard");
   }
 
-  // Show error state
+  // Email mismatch: sign out and redirect to login with the invite token
+  // so the user can sign in with the correct account
+  if (result.error === "email_mismatch") {
+    await supabase.auth.signOut();
+    redirect(`/login?invite_token=${encodeURIComponent(token)}`);
+  }
+
+  // Show error state for other errors
   return (
     <div className="flex min-h-screen items-center justify-center bg-black">
       <div className="w-full max-w-[400px] rounded-3xl border border-[#3a3a3c] bg-[#1c1c1e] p-10">

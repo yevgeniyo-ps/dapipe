@@ -471,6 +471,49 @@ export async function inviteMember(orgId: string, email: string, role: OrgRole) 
   return { error: null };
 }
 
+export async function resendInvitation(orgId: string, invitationId: string) {
+  await requireRole(orgId, ["owner", "admin"]);
+
+  const supabase = await createClient();
+  const service = createServiceClient();
+
+  // Fetch the invitation
+  const { data: invitation } = await supabase
+    .from("org_invitations")
+    .select("*")
+    .eq("id", invitationId)
+    .eq("org_id", orgId)
+    .is("accepted_at", null)
+    .single();
+
+  if (!invitation) return { error: "Invitation not found" };
+
+  // Reset expiry
+  await service
+    .from("org_invitations")
+    .update({ expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString() })
+    .eq("id", invitationId);
+
+  // Send email
+  const { data: org } = await service
+    .from("organizations")
+    .select("name")
+    .eq("id", orgId)
+    .single();
+  const { data: { user } } = await supabase.auth.getUser();
+  const inviterName = user?.user_metadata?.full_name || user?.email || "A team member";
+
+  await service.rpc("send_invitation_email", {
+    _email: invitation.email,
+    _org_name: org?.name || "an organization",
+    _inviter_name: inviterName,
+    _token: invitation.token,
+  });
+
+  revalidatePath("/dashboard/settings/members");
+  return { error: null };
+}
+
 export async function cancelInvitation(orgId: string, invitationId: string) {
   await requireRole(orgId, ["owner", "admin"]);
 
@@ -502,9 +545,9 @@ export async function acceptInvitation(token: string) {
 
   if (!invitation) return { error: "Invitation not found or expired", orgId: null };
 
-  // Verify email matches
+  // Verify email matches — return distinct code so invite page can sign out + redirect
   if (invitation.email.toLowerCase() !== user.email?.toLowerCase()) {
-    return { error: "This invitation was sent to a different email address", orgId: null };
+    return { error: "email_mismatch", orgId: null };
   }
 
   // Auto-approve if not already approved (invited = trusted)
