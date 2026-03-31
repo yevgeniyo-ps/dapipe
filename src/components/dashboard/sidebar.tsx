@@ -25,6 +25,7 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Logo } from "@/components/logo";
 import { useSidebar } from "@/components/sidebar-context";
+import { OrgSwitcher } from "@/components/dashboard/org-switcher";
 
 const navigation = [
   { name: "Overview", href: "/dashboard", icon: LayoutDashboard },
@@ -93,6 +94,11 @@ export function Sidebar({ user }: SidebarProps) {
         ) : (
           <Logo size="md" />
         )}
+      </div>
+
+      {/* Org switcher */}
+      <div className="pt-3">
+        <OrgSwitcher />
       </div>
 
       {/* Navigation */}

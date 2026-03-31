@@ -3,6 +3,7 @@
 import { createServiceClient } from "@/lib/supabase/server";
 import crypto from "crypto";
 import { revalidatePath } from "next/cache";
+import type { OrgRole } from "@/lib/types/database";
 
 // ── GitHub App Status ───────────────────────────────────────
 
@@ -550,5 +551,102 @@ export async function removeAdmin(adminId: string) {
   }
 
   revalidatePath("/admin/admins");
+  return { error: null };
+}
+
+// ── Organization CRUD ──────────────────────────────────────
+
+export async function createOrg(name: string, slug: string) {
+  if (!name || !slug) return { error: "Name and slug are required" };
+
+  const supabase = createServiceClient();
+  const { data, error } = await supabase
+    .from("organizations")
+    .insert({ name, slug: slug.toLowerCase().replace(/[^a-z0-9-]/g, "") })
+    .select()
+    .single();
+
+  if (error) return { error: error.message };
+  revalidatePath("/admin/orgs");
+  return { error: null, org: data };
+}
+
+export async function updateOrg(orgId: string, name: string, slug: string) {
+  if (!name || !slug) return { error: "Name and slug are required" };
+
+  const supabase = createServiceClient();
+  const { error } = await supabase
+    .from("organizations")
+    .update({ name, slug: slug.toLowerCase().replace(/[^a-z0-9-]/g, "") })
+    .eq("id", orgId);
+
+  if (error) return { error: error.message };
+  revalidatePath("/admin/orgs");
+  return { error: null };
+}
+
+export async function deleteOrg(orgId: string) {
+  const supabase = createServiceClient();
+
+  // CASCADE handles all related tables
+  const { error } = await supabase
+    .from("organizations")
+    .delete()
+    .eq("id", orgId);
+
+  if (error) return { error: error.message };
+  revalidatePath("/admin/orgs");
+  return { error: null };
+}
+
+export async function addOrgMember(orgId: string, email: string, role: OrgRole) {
+  if (!email) return { error: "Email is required" };
+
+  const supabase = createServiceClient();
+
+  // Look up user by email via admin API
+  const { data: { users }, error: listError } = await supabase.auth.admin.listUsers();
+  if (listError) return { error: listError.message };
+
+  const user = users?.find(
+    (u: any) => u.email?.toLowerCase() === email.toLowerCase().trim()
+  );
+  if (!user) return { error: "User not found. They must sign up first." };
+
+  const { error } = await supabase
+    .from("org_members")
+    .upsert(
+      { org_id: orgId, user_id: user.id, role },
+      { onConflict: "org_id,user_id" }
+    );
+
+  if (error) return { error: error.message };
+  revalidatePath("/admin/orgs");
+  return { error: null };
+}
+
+export async function removeOrgMember(orgId: string, memberId: string) {
+  const supabase = createServiceClient();
+  const { error } = await supabase
+    .from("org_members")
+    .delete()
+    .eq("id", memberId)
+    .eq("org_id", orgId);
+
+  if (error) return { error: error.message };
+  revalidatePath("/admin/orgs");
+  return { error: null };
+}
+
+export async function changeOrgMemberRole(orgId: string, memberId: string, role: OrgRole) {
+  const supabase = createServiceClient();
+  const { error } = await supabase
+    .from("org_members")
+    .update({ role })
+    .eq("id", memberId)
+    .eq("org_id", orgId);
+
+  if (error) return { error: error.message };
+  revalidatePath("/admin/orgs");
   return { error: null };
 }

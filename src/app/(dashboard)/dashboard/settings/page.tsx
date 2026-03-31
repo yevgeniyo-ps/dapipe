@@ -1,14 +1,14 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useOrgId } from "@/components/org-context";
+import { useOrg } from "@/components/org-context";
 import { getOrg, saveOrg } from "../actions";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Loader2, Save } from "lucide-react";
 
 export default function SettingsPage() {
-  const orgId = useOrgId();
+  const { orgId, permissions } = useOrg();
   const [orgName, setOrgName] = useState("");
   const [orgSlug, setOrgSlug] = useState("");
   const [saving, setSaving] = useState(false);
@@ -47,10 +47,12 @@ export default function SettingsPage() {
           <label className="text-[13px] font-medium text-secondary-foreground mb-2 block">Slug</label>
           <Input value={orgSlug} onChange={(e) => setOrgSlug(e.target.value)} />
         </div>
-        <Button onClick={handleSave} disabled={saving} size="sm">
-          {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
-          Save
-        </Button>
+        {permissions.canManageSettings && (
+          <Button onClick={handleSave} disabled={saving} size="sm">
+            {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+            Save
+          </Button>
+        )}
       </div>
     </div>
   );

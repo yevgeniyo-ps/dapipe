@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { useInterval } from "@/lib/use-interval";
-import { useOrgId } from "@/components/org-context";
+import { useOrg } from "@/components/org-context";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -66,7 +66,7 @@ const STATUS_CONFIG: Record<
 };
 
 export default function DeployPage() {
-  const orgId = useOrgId();
+  const { orgId, permissions } = useOrg();
   const [installation, setInstallation] = useState<Installation | null>(null);
   const [deployments, setDeployments] = useState<Deployment[]>([]);
   const [loading, setLoading] = useState(true);
@@ -157,12 +157,14 @@ export default function DeployPage() {
   };
 
   const handleSkip = async (deploymentId: string) => {
-    await skipDeployment(deploymentId);
+    if (!orgId) return;
+    await skipDeployment(orgId, deploymentId);
     await load();
   };
 
   const handleRetry = async (deploymentId: string) => {
-    await retryDeployment(deploymentId);
+    if (!orgId) return;
+    await retryDeployment(orgId, deploymentId);
     await load();
   };
 
@@ -284,26 +286,30 @@ export default function DeployPage() {
 
       {/* Action bar */}
       <div className="flex items-center gap-3">
-        <Button
-          size="sm"
-          onClick={handleDeploy}
-          disabled={deploying || selectedIds.size === 0}
-        >
-          {deploying ? (
-            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-          ) : (
-            <Rocket className="mr-2 h-4 w-4" />
-          )}
-          Deploy Selected ({selectedIds.size})
-        </Button>
-        <Button
-          size="sm"
-          variant="secondary"
-          onClick={handleDeployAll}
-          disabled={deploying || deployableCount === 0}
-        >
-          Deploy All
-        </Button>
+        {permissions.canManageResources && (
+          <>
+            <Button
+              size="sm"
+              onClick={handleDeploy}
+              disabled={deploying || selectedIds.size === 0}
+            >
+              {deploying ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <Rocket className="mr-2 h-4 w-4" />
+              )}
+              Deploy Selected ({selectedIds.size})
+            </Button>
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={handleDeployAll}
+              disabled={deploying || deployableCount === 0}
+            >
+              Deploy All
+            </Button>
+          </>
+        )}
         <Button size="sm" variant="secondary" onClick={load}>
           <RotateCcw className="mr-2 h-3 w-3" />
           Refresh
@@ -404,36 +410,38 @@ export default function DeployPage() {
                       )}
                     </td>
                     <td className="px-4 py-3 text-right">
-                      <div className="flex items-center justify-end gap-1">
-                        {dep.status === "pr_merged" && (
-                          <Button
-                            variant="destructive"
-                            size="sm"
-                            onClick={() => handleUninstall(dep.id)}
-                          >
-                            Uninstall
-                          </Button>
-                        )}
-                        {["error", "pr_closed"].includes(dep.status) && (
-                          <Button
-                            variant="secondary"
-                            size="sm"
-                            onClick={() => handleRetry(dep.id)}
-                          >
-                            <RotateCcw className="mr-1 h-3 w-3" />
-                            Retry
-                          </Button>
-                        )}
-                        {["pending", "error"].includes(dep.status) && (
-                          <Button
-                            variant="secondary"
-                            size="sm"
-                            onClick={() => handleSkip(dep.id)}
-                          >
-                            Skip
-                          </Button>
-                        )}
-                      </div>
+                      {permissions.canManageResources && (
+                        <div className="flex items-center justify-end gap-1">
+                          {dep.status === "pr_merged" && (
+                            <Button
+                              variant="destructive"
+                              size="sm"
+                              onClick={() => handleUninstall(dep.id)}
+                            >
+                              Uninstall
+                            </Button>
+                          )}
+                          {["error", "pr_closed"].includes(dep.status) && (
+                            <Button
+                              variant="secondary"
+                              size="sm"
+                              onClick={() => handleRetry(dep.id)}
+                            >
+                              <RotateCcw className="mr-1 h-3 w-3" />
+                              Retry
+                            </Button>
+                          )}
+                          {["pending", "error"].includes(dep.status) && (
+                            <Button
+                              variant="secondary"
+                              size="sm"
+                              onClick={() => handleSkip(dep.id)}
+                            >
+                              Skip
+                            </Button>
+                          )}
+                        </div>
+                      )}
                     </td>
                   </tr>
                 );

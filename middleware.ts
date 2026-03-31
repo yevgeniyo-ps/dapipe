@@ -79,5 +79,6 @@ export const config = {
     "/login",
     "/callback",
     "/waitlist",
+    "/invite",
   ],
 };

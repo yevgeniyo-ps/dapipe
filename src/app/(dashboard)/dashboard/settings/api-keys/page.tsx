@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { useInterval } from "@/lib/use-interval";
-import { useOrgId } from "@/components/org-context";
+import { useOrg } from "@/components/org-context";
 import { createApiKey, revokeApiKey, getApiKeys } from "../../actions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,7 +10,7 @@ import { Key, Plus, Copy, Loader2, X } from "lucide-react";
 import type { ApiKey } from "@/lib/types/database";
 
 export default function ApiKeysPage() {
-  const orgId = useOrgId();
+  const { orgId, permissions } = useOrg();
   const [keys, setKeys] = useState<ApiKey[]>([]);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
@@ -38,7 +38,7 @@ export default function ApiKeysPage() {
     } catch (e: unknown) { setError(e instanceof Error ? e.message : "Failed"); } finally { setCreating(false); }
   };
 
-  const handleRevoke = async (keyId: string) => { if (!orgId) return; await revokeApiKey(keyId); await loadKeys(); };
+  const handleRevoke = async (keyId: string) => { if (!orgId) return; await revokeApiKey(orgId, keyId); await loadKeys(); };
 
   if (loading) return <div className="flex items-center justify-center py-20"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>;
 
@@ -46,7 +46,9 @@ export default function ApiKeysPage() {
     <div className="space-y-6 max-w-3xl">
       <div className="flex items-center justify-between">
         <h1 className="text-[20px] font-semibold">API Keys</h1>
-        <Button onClick={() => setShowCreate(true)} size="sm"><Plus className="mr-2 h-4 w-4" /> New key</Button>
+        {permissions.canManageResources && (
+          <Button onClick={() => setShowCreate(true)} size="sm"><Plus className="mr-2 h-4 w-4" /> New key</Button>
+        )}
       </div>
 
       {error && <div className="rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-3 text-[13px] text-destructive">{error}</div>}
@@ -94,7 +96,11 @@ export default function ApiKeysPage() {
                   <td className="px-4 py-3 text-[14px] font-medium">{key.name}</td>
                   <td className="px-4 py-3 text-[12px] font-mono text-muted-foreground">{key.key_prefix}</td>
                   <td className="px-4 py-3 text-[13px] text-muted-foreground">{key.last_used_at ? new Date(key.last_used_at).toLocaleDateString() : "—"}</td>
-                  <td className="px-4 py-3 text-right"><Button variant="destructive" size="sm" onClick={() => handleRevoke(key.id)}>Revoke</Button></td>
+                  <td className="px-4 py-3 text-right">
+                    {permissions.canManageResources && (
+                      <Button variant="destructive" size="sm" onClick={() => handleRevoke(key.id)}>Revoke</Button>
+                    )}
+                  </td>
                 </tr>
               ))}
             </tbody>

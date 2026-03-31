@@ -2,14 +2,14 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { useInterval } from "@/lib/use-interval";
-import { useOrgId } from "@/components/org-context";
+import { useOrg } from "@/components/org-context";
 import { getPolicy, savePolicy, getBaseEndpoints } from "../actions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Loader2, Save, Plus, Trash2, Lock } from "lucide-react";
 
 export default function PoliciesPage() {
-  const orgId = useOrgId();
+  const { orgId, permissions } = useOrg();
   const [policyId, setPolicyId] = useState<string | null>(null);
   const [baseAllowed, setBaseAllowed] = useState<string[]>([]);
   const [baseBlocked, setBaseBlocked] = useState<string[]>([]);
@@ -92,10 +92,12 @@ export default function PoliciesPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-[20px] font-semibold">Egress Rules</h1>
-        <Button onClick={handleSave} disabled={saving} size="sm">
-          {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
-          Save
-        </Button>
+        {permissions.canManageResources && (
+          <Button onClick={handleSave} disabled={saving} size="sm">
+            {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+            Save
+          </Button>
+        )}
       </div>
 
       {/* Tab toggle */}
@@ -120,29 +122,31 @@ export default function PoliciesPage() {
       </div>
 
       {/* Add form */}
-      <div className="rounded-2xl border p-5 space-y-4">
-        <h3 className="text-[14px] font-semibold">
-          Add {activeTab === "allowed" ? "allowed" : "blocked"} endpoint
-        </h3>
-        <p className="text-[13px] text-muted-foreground">
-          {activeTab === "allowed"
-            ? "Domains permitted in restrict mode. Enter one domain per entry."
-            : "Domains or IPs to always block. IPs are auto-detected (e.g. 1.2.3.4)."}
-        </p>
-        <div className="flex gap-3">
-          <Input
-            placeholder={activeTab === "allowed" ? "registry.npmjs.org" : "evil.com or 1.2.3.4"}
-            value={newEntry}
-            onChange={(e) => setNewEntry(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && handleAdd()}
-            className="flex-1 font-mono text-[13px]"
-          />
-          <Button onClick={handleAdd} size="sm">
-            <Plus className="mr-2 h-4 w-4" />
-            Add
-          </Button>
+      {permissions.canManageResources && (
+        <div className="rounded-2xl border p-5 space-y-4">
+          <h3 className="text-[14px] font-semibold">
+            Add {activeTab === "allowed" ? "allowed" : "blocked"} endpoint
+          </h3>
+          <p className="text-[13px] text-muted-foreground">
+            {activeTab === "allowed"
+              ? "Domains permitted in restrict mode. Enter one domain per entry."
+              : "Domains or IPs to always block. IPs are auto-detected (e.g. 1.2.3.4)."}
+          </p>
+          <div className="flex gap-3">
+            <Input
+              placeholder={activeTab === "allowed" ? "registry.npmjs.org" : "evil.com or 1.2.3.4"}
+              value={newEntry}
+              onChange={(e) => setNewEntry(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && handleAdd()}
+              className="flex-1 font-mono text-[13px]"
+            />
+            <Button onClick={handleAdd} size="sm">
+              <Plus className="mr-2 h-4 w-4" />
+              Add
+            </Button>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Table */}
       <div className="rounded-2xl border overflow-hidden">
@@ -173,9 +177,11 @@ export default function PoliciesPage() {
                     <td className="px-4 py-3 text-[13px] font-mono font-medium">{d}</td>
                     <td className="px-4 py-3 text-[12px] text-muted-foreground">Custom</td>
                     <td className="px-4 py-3 text-right">
-                      <Button variant="destructive" size="sm" onClick={() => handleRemove(d, "allowed")}>
-                        <Trash2 className="mr-1 h-3 w-3" /> Remove
-                      </Button>
+                      {permissions.canManageResources && (
+                        <Button variant="destructive" size="sm" onClick={() => handleRemove(d, "allowed")}>
+                          <Trash2 className="mr-1 h-3 w-3" /> Remove
+                        </Button>
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -212,9 +218,11 @@ export default function PoliciesPage() {
                     <td className="px-4 py-3 text-[12px] text-muted-foreground">Domain</td>
                     <td className="px-4 py-3 text-[12px] text-muted-foreground">Custom</td>
                     <td className="px-4 py-3 text-right">
-                      <Button variant="destructive" size="sm" onClick={() => handleRemove(d, "blocked-domain")}>
-                        <Trash2 className="mr-1 h-3 w-3" /> Remove
-                      </Button>
+                      {permissions.canManageResources && (
+                        <Button variant="destructive" size="sm" onClick={() => handleRemove(d, "blocked-domain")}>
+                          <Trash2 className="mr-1 h-3 w-3" /> Remove
+                        </Button>
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -224,9 +232,11 @@ export default function PoliciesPage() {
                     <td className="px-4 py-3 text-[12px] text-muted-foreground">IP</td>
                     <td className="px-4 py-3 text-[12px] text-muted-foreground">Custom</td>
                     <td className="px-4 py-3 text-right">
-                      <Button variant="destructive" size="sm" onClick={() => handleRemove(ip, "blocked-ip")}>
-                        <Trash2 className="mr-1 h-3 w-3" /> Remove
-                      </Button>
+                      {permissions.canManageResources && (
+                        <Button variant="destructive" size="sm" onClick={() => handleRemove(ip, "blocked-ip")}>
+                          <Trash2 className="mr-1 h-3 w-3" /> Remove
+                        </Button>
+                      )}
                     </td>
                   </tr>
                 ))}

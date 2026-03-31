@@ -142,6 +142,34 @@ export interface AgentDownload {
   created_at: string;
 }
 
+export interface OrgInvitation {
+  id: string;
+  org_id: string;
+  email: string;
+  role: OrgRole;
+  token: string;
+  invited_by: string | null;
+  accepted_at: string | null;
+  expires_at: string;
+  created_at: string;
+}
+
+export interface OrgPermissions {
+  canManageMembers: boolean;
+  canInviteMembers: boolean;
+  canManageSettings: boolean;
+  canManageResources: boolean;
+  canWrite: boolean;
+  isReadOnly: boolean;
+}
+
+export interface OrgMembership {
+  org_id: string;
+  org_name: string;
+  org_slug: string;
+  role: OrgRole;
+}
+
 export interface GitHubInstallation {
   id: string;
   org_id: string;

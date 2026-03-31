@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { useInterval } from "@/lib/use-interval";
-import { useOrgId } from "@/components/org-context";
+import { useOrg } from "@/components/org-context";
 import { getAuditLog } from "../actions";
 import { Loader2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -21,7 +21,7 @@ const ACTION_LABELS: Record<string, { label: string; variant: "secondary" | "des
 };
 
 export default function AuditPage() {
-  const orgId = useOrgId();
+  const { orgId } = useOrg();
   const [entries, setEntries] = useState<AuditEntry[]>([]);
   const [loading, setLoading] = useState(true);
 

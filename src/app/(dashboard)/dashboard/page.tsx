@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { useInterval } from "@/lib/use-interval";
-import { useOrgId } from "@/components/org-context";
+import { useOrg } from "@/components/org-context";
 import { getDashboardOverview, getReportDetail, getBaseEndpoints, getPolicy, addToAllowed, addToBlocked } from "./actions";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -30,7 +30,7 @@ interface Report {
 }
 
 export default function DashboardPage() {
-  const orgId = useOrgId();
+  const { orgId } = useOrg();
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<{
     repoCount: number;
@@ -256,7 +256,7 @@ export default function DashboardPage() {
 }
 
 function RunDetail({ report: r, detail }: { report: Report; detail: any }) {
-  const orgId = useOrgId();
+  const { orgId, permissions } = useOrg();
   const [policy, setPolicy] = useState<any>(null);
   const [base, setBase] = useState<{ allowed: string[]; blocked: string[] }>({ allowed: [], blocked: [] });
   const [loaded, setLoaded] = useState(false);
@@ -377,7 +377,7 @@ function RunDetail({ report: r, detail }: { report: Report; detail: any }) {
                 <td className="px-3 py-2 text-[12px] font-mono">{target}</td>
                 <td className="px-3 py-2">{statusLabel(category)}</td>
                 <td className="px-3 py-2 text-right">
-                  {(category === "new" || category === "blocked_new") && loaded && !isBase(target) && (
+                  {permissions.canManageResources && (category === "new" || category === "blocked_new") && loaded && !isBase(target) && (
                     <div className="inline-flex gap-1">
                       <button onClick={() => handleAllow(target)} className="rounded px-2 py-0.5 text-[11px] border hover:bg-accent">Allow</button>
                       <button onClick={() => handleBlock(target)} className="rounded px-2 py-0.5 text-[11px] border border-destructive/30 text-destructive hover:bg-destructive/10">Block</button>

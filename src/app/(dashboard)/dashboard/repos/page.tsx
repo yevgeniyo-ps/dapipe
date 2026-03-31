@@ -2,14 +2,14 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { useInterval } from "@/lib/use-interval";
-import { useOrgId } from "@/components/org-context";
+import { useOrg } from "@/components/org-context";
 import { getRepos } from "../actions";
 import { Badge } from "@/components/ui/badge";
 import { Loader2 } from "lucide-react";
 import Link from "next/link";
 
 export default function ReposPage() {
-  const orgId = useOrgId();
+  const { orgId } = useOrg();
   const [repos, setRepos] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 

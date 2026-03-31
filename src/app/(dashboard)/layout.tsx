@@ -1,10 +1,12 @@
 import { createClient, createServiceClient } from "@/lib/supabase/server";
+import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { Sidebar } from "@/components/dashboard/sidebar";
 import { DashboardShell } from "@/components/dashboard/dashboard-shell";
 import { Topbar } from "@/components/dashboard/topbar";
 import { OrgProvider } from "@/components/org-context";
 import { SidebarProvider } from "@/components/sidebar-context";
+import type { OrgRole, OrgMembership } from "@/lib/types/database";
 
 export default async function DashboardLayout({
   children,
@@ -18,19 +20,49 @@ export default async function DashboardLayout({
 
   if (!user) redirect("/login");
 
-  const [{ data: approved }, { data: memberships }] = await Promise.all([
+  const [{ data: approved }, { data: allMemberships }] = await Promise.all([
     supabase.rpc("is_approved"),
     supabase
       .from("org_members")
-      .select("org_id")
+      .select("org_id, role, organizations(name, slug)")
       .eq("user_id", user.id)
-      .limit(1),
+      .order("created_at", { ascending: true }),
   ]);
 
   if (!approved) redirect("/waitlist");
 
-  let orgId = memberships?.[0]?.org_id;
+  // Build memberships list
+  const memberships: OrgMembership[] = (allMemberships || []).map(
+    (m: any) => ({
+      org_id: m.org_id,
+      org_name: m.organizations?.name || "Unknown",
+      org_slug: m.organizations?.slug || "",
+      role: m.role as OrgRole,
+    })
+  );
 
+  let orgId: string | undefined;
+  let role: OrgRole = "owner";
+
+  if (memberships.length > 0) {
+    // Check cookie for preferred org
+    const cookieStore = await cookies();
+    const preferredOrg = cookieStore.get("dapipe-org")?.value;
+
+    const preferred = preferredOrg
+      ? memberships.find((m) => m.org_id === preferredOrg)
+      : null;
+
+    if (preferred) {
+      orgId = preferred.org_id;
+      role = preferred.role;
+    } else {
+      orgId = memberships[0].org_id;
+      role = memberships[0].role;
+    }
+  }
+
+  // Auto-create org for new users with no memberships
   if (!orgId) {
     const service = createServiceClient();
 
@@ -51,11 +83,18 @@ export default async function DashboardLayout({
         .from("org_members")
         .insert({ org_id: org.id, user_id: user.id, role: "owner" });
       orgId = org.id;
+      role = "owner";
+      memberships.push({
+        org_id: org.id,
+        org_name: name,
+        org_slug: slug,
+        role: "owner",
+      });
     }
   }
 
   return (
-    <OrgProvider orgId={orgId!}>
+    <OrgProvider orgId={orgId!} role={role} memberships={memberships}>
       <SidebarProvider>
         <Sidebar
           user={{

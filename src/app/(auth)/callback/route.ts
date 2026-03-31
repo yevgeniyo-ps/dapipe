@@ -8,7 +8,6 @@ export async function GET(request: Request) {
   const isBo = hostname.startsWith("bo.");
   const next = searchParams.get("next") ?? (isBo ? "/admin" : "/dashboard");
 
-  // Use x-forwarded-host on Vercel, fall back to host header
   const forwardedHost = request.headers.get("x-forwarded-host");
   const host = request.headers.get("host");
   const proto = request.headers.get("x-forwarded-proto") ?? "https";
@@ -21,11 +20,16 @@ export async function GET(request: Request) {
     const { error } = await supabase.auth.exchangeCodeForSession(code);
 
     if (!error) {
-      // Check if user is approved
-      const { data: approved } = await supabase.rpc("is_approved");
-      if (!approved) {
-        return NextResponse.redirect(`${origin}/waitlist`);
+      // Skip approval check for invitation flow (invite page auto-approves)
+      const isInviteFlow = next.startsWith("/invite");
+
+      if (!isInviteFlow) {
+        const { data: approved } = await supabase.rpc("is_approved");
+        if (!approved) {
+          return NextResponse.redirect(`${origin}/waitlist`);
+        }
       }
+
       return NextResponse.redirect(`${origin}${next}`);
     }
   }
