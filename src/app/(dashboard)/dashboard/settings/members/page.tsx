@@ -16,6 +16,7 @@ import { ROLE_LABELS } from "@/lib/permissions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
   Select,
   SelectContent,
@@ -28,6 +29,7 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog";
 import {
@@ -36,7 +38,16 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { Loader2, UserPlus, X, Clock, Mail, HelpCircle } from "lucide-react";
+import {
+  Loader2,
+  UserPlus,
+  X,
+  Mail,
+  HelpCircle,
+  RotateCcw,
+  Trash2,
+  Send,
+} from "lucide-react";
 import type { OrgRole } from "@/lib/types/database";
 
 interface Member {
@@ -57,6 +68,26 @@ interface Invitation {
   created_at: string;
 }
 
+function initials(name: string | null, email: string): string {
+  if (name) {
+    return name
+      .split(" ")
+      .map((n) => n[0])
+      .join("")
+      .toUpperCase()
+      .slice(0, 2);
+  }
+  return email[0]?.toUpperCase() || "?";
+}
+
+function timeUntil(dateStr: string): string {
+  const diff = new Date(dateStr).getTime() - Date.now();
+  const days = Math.ceil(diff / (1000 * 60 * 60 * 24));
+  if (days <= 0) return "Expired";
+  if (days === 1) return "1 day left";
+  return `${days} days left`;
+}
+
 export default function MembersPage() {
   const { orgId, permissions } = useOrg();
   const [members, setMembers] = useState<Member[]>([]);
@@ -67,6 +98,7 @@ export default function MembersPage() {
   const [inviteRole, setInviteRole] = useState<OrgRole>("readonly");
   const [inviting, setInviting] = useState(false);
   const [error, setError] = useState("");
+  const [resending, setResending] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     if (!orgId) return;
@@ -104,8 +136,6 @@ export default function MembersPage() {
     }
   };
 
-  const [resending, setResending] = useState<string | null>(null);
-
   const handleResend = async (invId: string) => {
     if (!orgId) return;
     setResending(invId);
@@ -129,21 +159,15 @@ export default function MembersPage() {
   const handleRoleChange = async (memberId: string, newRole: OrgRole) => {
     if (!orgId) return;
     const result = await changeMemberRole(orgId, memberId, newRole);
-    if (result?.error) {
-      setError(result.error);
-    } else {
-      load();
-    }
+    if (result?.error) setError(result.error);
+    else load();
   };
 
   const handleRemove = async (memberId: string) => {
     if (!orgId) return;
     const result = await removeMember(orgId, memberId);
-    if (result?.error) {
-      setError(result.error);
-    } else {
-      load();
-    }
+    if (result?.error) setError(result.error);
+    else load();
   };
 
   if (loading)
@@ -154,9 +178,16 @@ export default function MembersPage() {
     );
 
   return (
-    <div className="space-y-6 max-w-3xl">
+    <div className="space-y-8 max-w-4xl">
+      {/* Header */}
       <div className="flex items-center justify-between">
-        <h1 className="text-[20px] font-semibold">Members</h1>
+        <div>
+          <h1 className="text-[20px] font-semibold">Members</h1>
+          <p className="text-[13px] text-muted-foreground mt-1">
+            {members.length} member{members.length !== 1 ? "s" : ""}
+            {invitations.length > 0 && ` · ${invitations.length} pending`}
+          </p>
+        </div>
         {permissions.canInviteMembers && (
           <Button size="sm" onClick={() => setShowInvite(true)} className="gap-1.5">
             <UserPlus className="h-3.5 w-3.5" />
@@ -166,123 +197,129 @@ export default function MembersPage() {
       </div>
 
       {error && (
-        <div className="rounded-xl border border-red-500/20 bg-red-500/5 px-4 py-3 text-[13px] text-red-400">
-          {error}
-          <button onClick={() => setError("")} className="ml-2 text-red-400/60 hover:text-red-400">
-            <X className="h-3 w-3 inline" />
+        <div className="rounded-xl border border-red-500/20 bg-red-500/5 px-4 py-3 text-[13px] text-red-400 flex items-center justify-between">
+          <span>{error}</span>
+          <button onClick={() => setError("")} className="text-red-400/60 hover:text-red-400 shrink-0 ml-3">
+            <X className="h-3.5 w-3.5" />
           </button>
         </div>
       )}
 
       {/* Pending invitations */}
       {permissions.canInviteMembers && invitations.length > 0 && (
-        <div className="space-y-2">
-          <h2 className="text-[13px] font-medium text-muted-foreground flex items-center gap-1.5">
-            <Clock className="h-3.5 w-3.5" />
+        <div className="space-y-3">
+          <h2 className="text-[13px] font-medium text-muted-foreground uppercase tracking-wider">
             Pending Invitations
           </h2>
-          <div className="rounded-2xl border overflow-hidden">
-            <table className="w-full border-collapse">
-              <tbody>
-                {invitations.map((inv) => (
-                  <tr key={inv.id} className="border-b last:border-0">
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-2">
-                        <Mail className="h-3.5 w-3.5 text-muted-foreground" />
-                        <span className="text-[13px] text-secondary-foreground">{inv.email}</span>
-                      </div>
-                    </td>
-                    <td className="px-4 py-3">
-                      <Badge variant="outline">{ROLE_LABELS[inv.role] || inv.role}</Badge>
-                    </td>
-                    <td className="px-4 py-3 text-right text-[12px] text-muted-foreground">
-                      Expires {new Date(inv.expires_at).toLocaleDateString()}
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      <div className="flex items-center justify-end gap-3">
-                        <button
-                          onClick={() => handleResend(inv.id)}
-                          disabled={resending === inv.id}
-                          className="text-[12px] text-muted-foreground hover:text-foreground transition-colors cursor-pointer disabled:opacity-50"
-                        >
-                          {resending === inv.id ? "Sending..." : "Resend"}
-                        </button>
-                        <button
-                          onClick={() => handleCancel(inv.id)}
-                          className="text-[12px] text-muted-foreground hover:text-red-400 transition-colors cursor-pointer"
-                        >
-                          Cancel
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div className="space-y-2">
+            {invitations.map((inv) => (
+              <div
+                key={inv.id}
+                className="flex items-center gap-4 rounded-xl border border-dashed px-4 py-3"
+              >
+                <div className="flex h-9 w-9 items-center justify-center rounded-full border border-dashed">
+                  <Mail className="h-4 w-4 text-muted-foreground" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-[13px] font-medium truncate">{inv.email}</p>
+                  <p className="text-[11px] text-muted-foreground">
+                    {timeUntil(inv.expires_at)}
+                  </p>
+                </div>
+                <Badge variant="secondary" className="text-[11px] shrink-0">
+                  {ROLE_LABELS[inv.role] || inv.role}
+                </Badge>
+                <div className="flex items-center gap-1 shrink-0">
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger
+                        onClick={() => handleResend(inv.id)}
+                        disabled={resending === inv.id}
+                        className="rounded-lg p-2 text-muted-foreground hover:text-foreground hover:bg-accent transition-colors disabled:opacity-50 cursor-pointer"
+                      >
+                        {resending === inv.id ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          <RotateCcw className="h-3.5 w-3.5" />
+                        )}
+                      </TooltipTrigger>
+                      <TooltipContent>Resend invitation</TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger
+                        onClick={() => handleCancel(inv.id)}
+                        className="rounded-lg p-2 text-muted-foreground hover:text-red-400 hover:bg-red-500/10 transition-colors cursor-pointer"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </TooltipTrigger>
+                      <TooltipContent>Cancel invitation</TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                </div>
+              </div>
+            ))}
           </div>
         </div>
       )}
 
       {/* Members list */}
-      <div className="rounded-2xl border overflow-hidden">
-        {!members || members.length === 0 ? (
-          <p className="text-[13px] text-muted-foreground py-12 text-center">
-            No members found.
-          </p>
-        ) : (
-          <table className="w-full border-collapse">
-            <thead>
-              <tr className="border-b">
-                <th className="px-4 py-3 text-left text-[12px] font-semibold text-muted-foreground uppercase tracking-[0.5px]">
-                  User
-                </th>
-                <th className="px-4 py-3 text-left text-[12px] font-semibold text-muted-foreground uppercase tracking-[0.5px]">
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger className="inline-flex items-center gap-1 cursor-help">
-                        Role
-                        <HelpCircle className="h-3 w-3" />
-                      </TooltipTrigger>
-                      <TooltipContent side="bottom" align="start" className="max-w-[240px] text-left leading-relaxed">
-                        <strong>Admin</strong> — full access, manage members and settings<br />
-                        <strong>Power</strong> — manage repos, policies, keys, deploy<br />
-                        <strong>Read-only</strong> — view dashboard and reports
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                </th>
-                <th className="px-4 py-3 text-left text-[12px] font-semibold text-muted-foreground uppercase tracking-[0.5px]">
-                  Joined
-                </th>
-                {permissions.canManageMembers && (
-                  <th className="px-4 py-3 text-right text-[12px] font-semibold text-muted-foreground uppercase tracking-[0.5px]">
-                    Actions
-                  </th>
-                )}
-              </tr>
-            </thead>
-            <tbody>
+      <div className="space-y-3">
+        <div className="flex items-center gap-2">
+          <h2 className="text-[13px] font-medium text-muted-foreground uppercase tracking-wider">
+            Team Members
+          </h2>
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger className="cursor-help">
+                <HelpCircle className="h-3.5 w-3.5 text-muted-foreground" />
+              </TooltipTrigger>
+              <TooltipContent side="right" className="max-w-[260px] text-left leading-relaxed">
+                <strong>Admin</strong> — full access, manage members and settings<br />
+                <strong>Power</strong> — manage repos, policies, keys, deploy<br />
+                <strong>Read-only</strong> — view dashboard and reports
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        </div>
+
+        <div className="rounded-2xl border overflow-hidden">
+          {!members || members.length === 0 ? (
+            <p className="text-[13px] text-muted-foreground py-12 text-center">
+              No members found.
+            </p>
+          ) : (
+            <div className="divide-y">
               {members.map((member) => (
-                <tr key={member.id} className="border-b last:border-0">
-                  <td className="px-4 py-3">
-                    <div>
-                      <span className="text-[13px] text-secondary-foreground">
-                        {member.full_name || member.email}
-                      </span>
-                      {member.full_name && (
-                        <span className="text-[12px] text-muted-foreground ml-2">
-                          {member.email}
-                        </span>
-                      )}
-                    </div>
-                  </td>
-                  <td className="px-4 py-3">
+                <div key={member.id} className="flex items-center gap-4 px-4 py-3.5">
+                  {/* Avatar */}
+                  <Avatar className="h-9 w-9 shrink-0">
+                    <AvatarFallback className="bg-accent text-[11px] font-medium">
+                      {initials(member.full_name, member.email)}
+                    </AvatarFallback>
+                  </Avatar>
+
+                  {/* Name & email */}
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[13px] font-medium truncate">
+                      {member.full_name || member.email}
+                    </p>
+                    {member.full_name && (
+                      <p className="text-[11px] text-muted-foreground truncate">
+                        {member.email}
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Role */}
+                  <div className="shrink-0">
                     {permissions.canManageMembers && member.role !== "admin" ? (
                       <Select
                         value={member.role}
                         onValueChange={(val) => val && handleRoleChange(member.id, val as OrgRole)}
                       >
-                        <SelectTrigger className="w-[100px] h-7 text-[12px]">
+                        <SelectTrigger className="w-[110px] h-8 text-[12px]">
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
@@ -291,29 +328,40 @@ export default function MembersPage() {
                         </SelectContent>
                       </Select>
                     ) : (
-                      <Badge variant="outline">{ROLE_LABELS[member.role] || member.role}</Badge>
+                      <Badge variant="outline" className="text-[11px]">
+                        {ROLE_LABELS[member.role] || member.role}
+                      </Badge>
                     )}
-                  </td>
-                  <td className="px-4 py-3 text-[12px] text-muted-foreground">
+                  </div>
+
+                  {/* Joined */}
+                  <span className="text-[12px] text-muted-foreground shrink-0 w-[80px] text-right">
                     {new Date(member.created_at).toLocaleDateString()}
-                  </td>
-                  {permissions.canManageMembers && (
-                    <td className="px-4 py-3 text-right">
+                  </span>
+
+                  {/* Remove */}
+                  {permissions.canManageMembers ? (
+                    <div className="shrink-0 w-[32px]">
                       {member.role !== "admin" && (
-                        <button
-                          onClick={() => handleRemove(member.id)}
-                          className="text-[12px] text-muted-foreground hover:text-red-400 transition-colors cursor-pointer"
-                        >
-                          Remove
-                        </button>
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger
+                              onClick={() => handleRemove(member.id)}
+                              className="rounded-lg p-2 text-muted-foreground hover:text-red-400 hover:bg-red-500/10 transition-colors cursor-pointer"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </TooltipTrigger>
+                            <TooltipContent>Remove member</TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
                       )}
-                    </td>
-                  )}
-                </tr>
+                    </div>
+                  ) : null}
+                </div>
               ))}
-            </tbody>
-          </table>
-        )}
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Invite dialog */}
@@ -321,10 +369,13 @@ export default function MembersPage() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Invite Member</DialogTitle>
+            <DialogDescription>
+              Send an invitation email to add someone to your organization.
+            </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-2">
             <div>
-              <label className="text-[12px] font-medium text-muted-foreground mb-1 block">
+              <label className="text-[12px] font-medium text-muted-foreground mb-1.5 block">
                 Email address
               </label>
               <Input
@@ -336,7 +387,7 @@ export default function MembersPage() {
               />
             </div>
             <div>
-              <label className="text-[12px] font-medium text-muted-foreground mb-1 block">
+              <label className="text-[12px] font-medium text-muted-foreground mb-1.5 block">
                 Role
               </label>
               <Select value={inviteRole} onValueChange={(val) => val && setInviteRole(val as OrgRole)}>
@@ -358,7 +409,12 @@ export default function MembersPage() {
             </div>
           </div>
           <DialogFooter>
-            <Button onClick={handleInvite} disabled={inviting || !inviteEmail.trim()} size="sm">
+            <Button onClick={handleInvite} disabled={inviting || !inviteEmail.trim()} size="sm" className="gap-1.5">
+              {inviting ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Send className="h-3.5 w-3.5" />
+              )}
               {inviting ? "Sending..." : "Send Invitation"}
             </Button>
           </DialogFooter>
