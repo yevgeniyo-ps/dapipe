@@ -42,7 +42,7 @@ export default async function DashboardLayout({
   );
 
   let orgId: string | undefined;
-  let role: OrgRole = "owner";
+  let role: OrgRole = "admin";
 
   if (memberships.length > 0) {
     // Check cookie for preferred org
@@ -79,14 +79,14 @@ export default async function DashboardLayout({
     if (org) {
       await service
         .from("org_members")
-        .insert({ org_id: org.id, user_id: user.id, role: "owner" });
+        .insert({ org_id: org.id, user_id: user.id, role: "admin" });
       orgId = org.id;
-      role = "owner";
+      role = "admin";
       memberships.push({
         org_id: org.id,
         org_name: name,
         org_slug: slug,
-        role: "owner",
+        role: "admin",
       });
     }
   }

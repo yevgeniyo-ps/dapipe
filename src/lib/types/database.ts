@@ -1,4 +1,4 @@
-export type OrgRole = "owner" | "admin" | "member";
+export type OrgRole = "admin" | "power" | "readonly";
 export type PolicyMode = "monitor" | "restrict";
 export type ReportStatus = "clean" | "warning" | "blocked";
 

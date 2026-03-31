@@ -87,7 +87,7 @@ export default function OrgsPage() {
   // Add member form
   const [addMemberOrgId, setAddMemberOrgId] = useState<string | null>(null);
   const [addMemberEmail, setAddMemberEmail] = useState("");
-  const [addMemberRole, setAddMemberRole] = useState<OrgRole>("member");
+  const [addMemberRole, setAddMemberRole] = useState<OrgRole>("readonly");
   const [addingMember, setAddingMember] = useState(false);
 
   const load = useCallback(async () => {
@@ -188,7 +188,7 @@ export default function OrgsPage() {
       setError(result.error);
     } else {
       setAddMemberEmail("");
-      setAddMemberRole("member");
+      setAddMemberRole("readonly");
       handleExpand(addMemberOrgId);
       load();
     }
@@ -299,7 +299,7 @@ export default function OrgsPage() {
                     onStartAddMember={() => {
                       setAddMemberOrgId(org.id);
                       setAddMemberEmail("");
-                      setAddMemberRole("member");
+                      setAddMemberRole("readonly");
                     }}
                     onAddMemberEmailChange={setAddMemberEmail}
                     onAddMemberRoleChange={setAddMemberRole}
@@ -534,9 +534,9 @@ function OrgRow({
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="owner">owner</SelectItem>
-                          <SelectItem value="admin">admin</SelectItem>
-                          <SelectItem value="member">member</SelectItem>
+                          <SelectItem value="admin">Admin</SelectItem>
+                          <SelectItem value="power">Power</SelectItem>
+                          <SelectItem value="readonly">Read-only</SelectItem>
                         </SelectContent>
                       </Select>
                       <Button size="sm" className="h-8" onClick={onAddMember} disabled={addingMember || !addMemberEmail.trim()}>
@@ -563,9 +563,9 @@ function OrgRow({
                                     <SelectValue />
                                   </SelectTrigger>
                                   <SelectContent>
-                                    <SelectItem value="owner">owner</SelectItem>
-                                    <SelectItem value="admin">admin</SelectItem>
-                                    <SelectItem value="member">member</SelectItem>
+                                    <SelectItem value="admin">Admin</SelectItem>
+                                    <SelectItem value="power">Power</SelectItem>
+                                    <SelectItem value="readonly">Read-only</SelectItem>
                                   </SelectContent>
                                 </Select>
                               </td>

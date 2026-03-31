@@ -12,6 +12,7 @@ import {
   changeMemberRole,
   removeMember,
 } from "../../actions";
+import { ROLE_LABELS } from "@/lib/permissions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -57,7 +58,7 @@ export default function MembersPage() {
   const [loading, setLoading] = useState(true);
   const [showInvite, setShowInvite] = useState(false);
   const [inviteEmail, setInviteEmail] = useState("");
-  const [inviteRole, setInviteRole] = useState<OrgRole>("member");
+  const [inviteRole, setInviteRole] = useState<OrgRole>("readonly");
   const [inviting, setInviting] = useState(false);
   const [error, setError] = useState("");
 
@@ -91,7 +92,7 @@ export default function MembersPage() {
     } else {
       setShowInvite(false);
       setInviteEmail("");
-      setInviteRole("member");
+      setInviteRole("readonly");
       setInviting(false);
       load();
     }
@@ -186,7 +187,7 @@ export default function MembersPage() {
                       </div>
                     </td>
                     <td className="px-4 py-3">
-                      <Badge variant="outline">{inv.role}</Badge>
+                      <Badge variant="outline">{ROLE_LABELS[inv.role] || inv.role}</Badge>
                     </td>
                     <td className="px-4 py-3 text-right text-[12px] text-muted-foreground">
                       Expires {new Date(inv.expires_at).toLocaleDateString()}
@@ -258,7 +259,7 @@ export default function MembersPage() {
                     </div>
                   </td>
                   <td className="px-4 py-3">
-                    {permissions.canManageMembers && member.role !== "owner" ? (
+                    {permissions.canManageMembers && member.role !== "admin" ? (
                       <Select
                         value={member.role}
                         onValueChange={(val) => val && handleRoleChange(member.id, val as OrgRole)}
@@ -267,12 +268,12 @@ export default function MembersPage() {
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="admin">admin</SelectItem>
-                          <SelectItem value="member">member</SelectItem>
+                          <SelectItem value="power">Power</SelectItem>
+                          <SelectItem value="readonly">Read-only</SelectItem>
                         </SelectContent>
                       </Select>
                     ) : (
-                      <Badge variant="outline">{member.role}</Badge>
+                      <Badge variant="outline">{ROLE_LABELS[member.role] || member.role}</Badge>
                     )}
                   </td>
                   <td className="px-4 py-3 text-[12px] text-muted-foreground">
@@ -280,7 +281,7 @@ export default function MembersPage() {
                   </td>
                   {permissions.canManageMembers && (
                     <td className="px-4 py-3 text-right">
-                      {member.role !== "owner" && (
+                      {member.role !== "admin" && (
                         <button
                           onClick={() => handleRemove(member.id)}
                           className="text-[12px] text-muted-foreground hover:text-red-400 transition-colors cursor-pointer"
@@ -326,9 +327,9 @@ export default function MembersPage() {
                 </SelectTrigger>
                 <SelectContent>
                   {permissions.canManageMembers && (
-                    <SelectItem value="admin">Admin -- can manage repos, policies, keys</SelectItem>
+                    <SelectItem value="power">Power -- manage repos, policies, keys</SelectItem>
                   )}
-                  <SelectItem value="member">Member -- read-only access</SelectItem>
+                  <SelectItem value="readonly">Read-only -- view only</SelectItem>
                 </SelectContent>
               </Select>
             </div>

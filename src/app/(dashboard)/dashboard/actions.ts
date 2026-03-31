@@ -10,7 +10,7 @@ import type { OrgRole } from "@/lib/types/database";
 // ── API Keys ───────────────────────────────────────────────
 
 export async function createApiKey(orgId: string, name: string) {
-  await requireRole(orgId, ["owner", "admin"]);
+  await requireRole(orgId, ["admin", "power"]);
 
   const rawKey = `dp_${crypto.randomUUID().replace(/-/g, "")}`;
   const prefix = rawKey.slice(0, 10) + "...";
@@ -31,7 +31,7 @@ export async function createApiKey(orgId: string, name: string) {
 }
 
 export async function revokeApiKey(orgId: string, keyId: string) {
-  await requireRole(orgId, ["owner", "admin"]);
+  await requireRole(orgId, ["admin", "power"]);
 
   const supabase = await createClient();
   await supabase
@@ -77,7 +77,7 @@ export async function savePolicy(
     blocked_ips: string[];
   }
 ) {
-  await requireRole(orgId, ["owner", "admin"]);
+  await requireRole(orgId, ["admin", "power"]);
 
   const supabase = await createClient();
   const row = { org_id: orgId, repo_id: null, ...payload };
@@ -119,7 +119,7 @@ export async function selectReposForDeployment(
   orgId: string,
   deploymentIds: string[]
 ) {
-  await requireRole(orgId, ["owner", "admin"]);
+  await requireRole(orgId, ["admin", "power"]);
 
   const supabase = await createClient();
   await supabase
@@ -136,7 +136,7 @@ export async function selectReposForDeployment(
 }
 
 export async function selectAllRepos(orgId: string) {
-  await requireRole(orgId, ["owner", "admin"]);
+  await requireRole(orgId, ["admin", "power"]);
 
   const supabase = await createClient();
   await supabase
@@ -151,7 +151,7 @@ export async function selectAllRepos(orgId: string) {
 }
 
 export async function triggerDeploy(orgId: string) {
-  await requireRole(orgId, ["owner", "admin"]);
+  await requireRole(orgId, ["admin", "power"]);
 
   const supabase = await createClient();
   const { data: installation } = await supabase
@@ -194,7 +194,7 @@ export async function triggerDeploy(orgId: string) {
 }
 
 export async function triggerUninstall(orgId: string, deploymentIds: string[]) {
-  await requireRole(orgId, ["owner", "admin"]);
+  await requireRole(orgId, ["admin", "power"]);
 
   const supabase = await createClient();
   const { data: installation } = await supabase
@@ -232,7 +232,7 @@ export async function triggerUninstall(orgId: string, deploymentIds: string[]) {
 }
 
 export async function skipDeployment(orgId: string, deploymentId: string) {
-  await requireRole(orgId, ["owner", "admin"]);
+  await requireRole(orgId, ["admin", "power"]);
 
   const supabase = await createClient();
   await supabase
@@ -243,7 +243,7 @@ export async function skipDeployment(orgId: string, deploymentId: string) {
 }
 
 export async function retryDeployment(orgId: string, deploymentId: string) {
-  await requireRole(orgId, ["owner", "admin"]);
+  await requireRole(orgId, ["admin", "power"]);
 
   const supabase = await createClient();
   await supabase
@@ -337,7 +337,7 @@ export async function getMembers(orgId: string) {
 }
 
 export async function changeMemberRole(orgId: string, memberId: string, newRole: OrgRole) {
-  await requireRole(orgId, ["owner"]);
+  await requireRole(orgId, ["admin"]);
 
   const supabase = await createClient();
   const { error } = await supabase
@@ -353,19 +353,19 @@ export async function changeMemberRole(orgId: string, memberId: string, newRole:
 }
 
 export async function removeMember(orgId: string, memberId: string) {
-  await requireRole(orgId, ["owner"]);
+  await requireRole(orgId, ["admin"]);
 
   const supabase = await createClient();
 
   // Prevent removing the last owner
   const { data: member } = await supabase
     .from("org_members").select("role").eq("id", memberId).single();
-  if (member?.role === "owner") {
+  if (member?.role === "admin") {
     const { count } = await supabase
       .from("org_members")
       .select("*", { count: "exact", head: true })
       .eq("org_id", orgId)
-      .eq("role", "owner");
+      .eq("role", "admin");
     if ((count || 0) <= 1) return { error: "Cannot remove the last owner" };
   }
 
@@ -396,10 +396,10 @@ export async function getInvitations(orgId: string) {
 }
 
 export async function inviteMember(orgId: string, email: string, role: OrgRole) {
-  const { userId, role: callerRole } = await requireRole(orgId, ["owner", "admin"]);
+  const { userId, role: callerRole } = await requireRole(orgId, ["admin", "power"]);
 
   // Admin can't invite as owner
-  if (callerRole === "admin" && role === "owner") {
+  if (callerRole === "power" && role === "admin") {
     return { error: "Admins cannot invite owners" };
   }
 
@@ -473,7 +473,7 @@ export async function inviteMember(orgId: string, email: string, role: OrgRole) 
 
 export async function resendInvitation(orgId: string, invitationId: string) {
   try {
-    await requireRole(orgId, ["owner", "admin"]);
+    await requireRole(orgId, ["admin", "power"]);
 
     const supabase = await createClient();
     const service = createServiceClient();
@@ -519,7 +519,7 @@ export async function resendInvitation(orgId: string, invitationId: string) {
 }
 
 export async function cancelInvitation(orgId: string, invitationId: string) {
-  await requireRole(orgId, ["owner", "admin"]);
+  await requireRole(orgId, ["admin", "power"]);
 
   const supabase = await createClient();
   await supabase
@@ -605,7 +605,7 @@ export async function getBaseEndpoints() {
 // ── Quick policy actions (from dashboard) ─────────────────
 
 export async function addToAllowed(orgId: string, target: string) {
-  await requireRole(orgId, ["owner", "admin"]);
+  await requireRole(orgId, ["admin", "power"]);
 
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -643,7 +643,7 @@ export async function addToAllowed(orgId: string, target: string) {
 }
 
 export async function addToBlocked(orgId: string, target: string) {
-  await requireRole(orgId, ["owner", "admin"]);
+  await requireRole(orgId, ["admin", "power"]);
 
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -711,7 +711,7 @@ export async function getOrg(orgId: string) {
 }
 
 export async function saveOrg(orgId: string, name: string, slug: string) {
-  await requireRole(orgId, ["owner"]);
+  await requireRole(orgId, ["admin"]);
 
   const supabase = await createClient();
   await supabase
@@ -748,7 +748,7 @@ export async function createOrg(name: string, slug: string) {
 
   await service
     .from("org_members")
-    .insert({ org_id: org.id, user_id: user.id, role: "owner" });
+    .insert({ org_id: org.id, user_id: user.id, role: "admin" });
 
   const cookieStore = await cookies();
   cookieStore.set("dapipe-org", org.id, {
