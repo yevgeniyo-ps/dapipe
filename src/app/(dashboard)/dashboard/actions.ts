@@ -472,46 +472,50 @@ export async function inviteMember(orgId: string, email: string, role: OrgRole) 
 }
 
 export async function resendInvitation(orgId: string, invitationId: string) {
-  await requireRole(orgId, ["owner", "admin"]);
+  try {
+    await requireRole(orgId, ["owner", "admin"]);
 
-  const supabase = await createClient();
-  const service = createServiceClient();
+    const supabase = await createClient();
+    const service = createServiceClient();
 
-  // Fetch the invitation
-  const { data: invitation } = await supabase
-    .from("org_invitations")
-    .select("*")
-    .eq("id", invitationId)
-    .eq("org_id", orgId)
-    .is("accepted_at", null)
-    .single();
+    // Fetch the invitation via service client (has full access)
+    const { data: invitation, error: fetchErr } = await service
+      .from("org_invitations")
+      .select("*")
+      .eq("id", invitationId)
+      .eq("org_id", orgId)
+      .is("accepted_at", null)
+      .single();
 
-  if (!invitation) return { error: "Invitation not found" };
+    if (fetchErr || !invitation) return { error: fetchErr?.message || "Invitation not found" };
 
-  // Reset expiry
-  await service
-    .from("org_invitations")
-    .update({ expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString() })
-    .eq("id", invitationId);
+    // Reset expiry
+    await service
+      .from("org_invitations")
+      .update({ expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString() })
+      .eq("id", invitationId);
 
-  // Send email
-  const { data: org } = await service
-    .from("organizations")
-    .select("name")
-    .eq("id", orgId)
-    .single();
-  const { data: { user } } = await supabase.auth.getUser();
-  const inviterName = user?.user_metadata?.full_name || user?.email || "A team member";
+    // Send email
+    const { data: org } = await service
+      .from("organizations")
+      .select("name")
+      .eq("id", orgId)
+      .single();
+    const { data: { user } } = await supabase.auth.getUser();
+    const inviterName = user?.user_metadata?.full_name || user?.email || "A team member";
 
-  await service.rpc("send_invitation_email", {
-    _email: invitation.email,
-    _org_name: org?.name || "an organization",
-    _inviter_name: inviterName,
-    _token: invitation.token,
-  });
+    await service.rpc("send_invitation_email", {
+      _email: invitation.email,
+      _org_name: org?.name || "an organization",
+      _inviter_name: inviterName,
+      _token: invitation.token,
+    });
 
-  revalidatePath("/dashboard/settings/members");
-  return { error: null };
+    revalidatePath("/dashboard/settings/members");
+    return { error: null };
+  } catch (e: unknown) {
+    return { error: e instanceof Error ? e.message : "Failed to resend invitation" };
+  }
 }
 
 export async function cancelInvitation(orgId: string, invitationId: string) {

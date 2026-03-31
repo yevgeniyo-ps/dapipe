@@ -97,12 +97,20 @@ export default function MembersPage() {
     }
   };
 
+  const [resending, setResending] = useState<string | null>(null);
+
   const handleResend = async (invId: string) => {
     if (!orgId) return;
+    setResending(invId);
     setError("");
-    const result = await resendInvitation(orgId, invId);
-    if (result?.error) setError(result.error);
-    else load();
+    try {
+      const result = await resendInvitation(orgId, invId);
+      if (result?.error) setError(result.error);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Failed to resend");
+    } finally {
+      setResending(null);
+    }
   };
 
   const handleCancel = async (invId: string) => {
@@ -187,9 +195,10 @@ export default function MembersPage() {
                       <div className="flex items-center justify-end gap-3">
                         <button
                           onClick={() => handleResend(inv.id)}
-                          className="text-[12px] text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+                          disabled={resending === inv.id}
+                          className="text-[12px] text-muted-foreground hover:text-foreground transition-colors cursor-pointer disabled:opacity-50"
                         >
-                          Resend
+                          {resending === inv.id ? "Sending..." : "Resend"}
                         </button>
                         <button
                           onClick={() => handleCancel(inv.id)}
